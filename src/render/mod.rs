@@ -2,6 +2,7 @@ pub mod atlas;
 pub mod camera;
 pub mod context;
 pub mod effects;
+pub mod entity_renderer;
 pub mod gui;
 pub mod mesher;
 pub mod uniforms;
@@ -12,6 +13,7 @@ pub use camera::Camera;
 pub use context::RenderContext;
 #[allow(unused_imports)]
 pub use effects::{EffectVertex, EffectsRenderer, Particle, ParticleSystem};
+pub use entity_renderer::EntityRenderer;
 #[allow(unused_imports)]
 pub use gui::{inventory::InventoryGui, GuiAtlas, GuiRect, GuiRenderer, GuiVertex};
 #[allow(unused_imports)]

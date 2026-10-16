@@ -27,6 +27,7 @@ pub struct RenderContext<'w> {
     pub gui_atlas: Arc<GuiAtlas>,
     pub gui_renderer: GuiRenderer,
     pub effects_renderer: EffectsRenderer,
+    pub entity_renderer: crate::render::entity_renderer::EntityRenderer,
 }
 
 impl<'w> RenderContext<'w> {
@@ -109,6 +110,14 @@ impl<'w> RenderContext<'w> {
             &atlas_bind_group_layout,
         );
 
+        // REA Verified: 3D Dropped Item Entity Renderer setup
+        let entity_renderer = crate::render::entity_renderer::EntityRenderer::new(
+            &device,
+            config.format,
+            &camera_bind_group_layout,
+            &atlas_bind_group_layout,
+        );
+
         Ok(Self {
             window,
             surface,
@@ -129,6 +138,7 @@ impl<'w> RenderContext<'w> {
             gui_atlas,
             gui_renderer,
             effects_renderer,
+            entity_renderer,
         })
     }
 
@@ -159,6 +169,7 @@ impl<'w> RenderContext<'w> {
         camera_right: glam::Vec3,
         camera_up: glam::Vec3,
         player_stats: Option<&crate::game::stats::PlayerStats>,
+        entities: &[crate::game::entities::ItemEntity],
     ) -> Result<(), Box<dyn std::error::Error>> {
         let output = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(tex) | wgpu::CurrentSurfaceTexture::Suboptimal(tex) => tex,
@@ -219,6 +230,17 @@ impl<'w> RenderContext<'w> {
             camera_right,
             camera_up,
             mining_target,
+        );
+
+        // 3D Dropped Items pass: 1/4-scale rotating textured voxel cubes
+        self.entity_renderer.render(
+            &mut encoder,
+            &self.queue,
+            &view,
+            &self.camera_bind_group,
+            &self.atlas_bind_group,
+            &self.atlas,
+            entities,
         );
 
         // 2D HUD and/or Inventory pass (executes after 3D pass with LoadOp::Load without clearing color attachment)

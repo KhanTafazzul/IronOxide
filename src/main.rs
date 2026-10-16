@@ -17,7 +17,7 @@ use audio::{AudioSystem, FootstepTracker, SoundEvent, SoundType};
 use game::inventory::{ItemStack, PlayerInventory};
 use game::stats::PlayerStats;
 use game::{
-    raycast_voxel, Aabb, BlockMiningTracker, MiningUpdateResult, PlayerInput, PlayerPhysics, World,
+    raycast_voxel, Aabb, BlockMiningTracker, ItemEntityManager, MiningUpdateResult, PlayerInput, PlayerPhysics, World,
     DEFAULT_MAX_REACH,
 };
 use render::atlas::{BlockType, TextureAtlas};
@@ -39,6 +39,7 @@ struct GameApp<'a> {
     inventory_gui: InventoryGui,
     stats: PlayerStats,
     mining_tracker: BlockMiningTracker,
+    item_entities: ItemEntityManager,
     left_mouse_held: bool,
     mouse_captured: bool,
     audio: AudioSystem,
@@ -131,6 +132,7 @@ impl<'a> GameApp<'a> {
             inventory_gui,
             stats: PlayerStats::new(),
             mining_tracker,
+            item_entities: ItemEntityManager::new(),
             left_mouse_held: false,
             mouse_captured: false,
             audio,
@@ -170,60 +172,10 @@ impl<'a> GameApp<'a> {
     }
 
     /// Add an item stack to player inventory (hotbar first, then main storage)
-    fn add_item_to_inventory(&mut self, mut stack: ItemStack) {
-        if stack.is_empty() {
-            return;
+    fn add_item_to_inventory(&mut self, stack: ItemStack) {
+        if let Some(rem) = self.inventory.add_item(stack) {
+            println!("Inventory full! Uncollected items: {:?}", rem);
         }
-
-        // 1. Try to merge with existing stacks in hotbar
-        for slot in &mut self.inventory.hotbar {
-            if let Some(mut existing) = *slot {
-                if existing.can_stack_with(&stack) && existing.count < existing.max_stack {
-                    let space = existing.max_stack - existing.count;
-                    let to_add = stack.count.min(space);
-                    existing.count += to_add;
-                    stack.count -= to_add;
-                    *slot = Some(existing);
-                    if stack.count == 0 {
-                        return;
-                    }
-                }
-            }
-        }
-
-        // 2. Try to merge with existing stacks in main storage
-        for slot in &mut self.inventory.main {
-            if let Some(mut existing) = *slot {
-                if existing.can_stack_with(&stack) && existing.count < existing.max_stack {
-                    let space = existing.max_stack - existing.count;
-                    let to_add = stack.count.min(space);
-                    existing.count += to_add;
-                    stack.count -= to_add;
-                    *slot = Some(existing);
-                    if stack.count == 0 {
-                        return;
-                    }
-                }
-            }
-        }
-
-        // 3. Find first empty slot in hotbar
-        for slot in &mut self.inventory.hotbar {
-            if slot.is_none() {
-                *slot = Some(stack);
-                return;
-            }
-        }
-
-        // 4. Find first empty slot in main storage
-        for slot in &mut self.inventory.main {
-            if slot.is_none() {
-                *slot = Some(stack);
-                return;
-            }
-        }
-
-        println!("Inventory full! Dropped item: {:?}", stack);
     }
 
     fn update_physics(&mut self, _dt: f32) {
@@ -586,16 +538,29 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                             ctx.effects_renderer.particles.spawn_block_break(pos, block);
                         }
 
-                        // Vanilla-style block drop
-                        let drop = match block {
-                            BlockType::GrassBlock => ItemStack::new(game::inventory::ITEM_DIRT, 1),
-                            BlockType::Stone => ItemStack::new(game::inventory::ITEM_COBBLESTONE, 1),
-                            other => ItemStack::from_block(other, 1)
-                                .unwrap_or(ItemStack::new(game::inventory::ITEM_DIRT, 1)),
-                        };
-                        self.add_item_to_inventory(drop);
+                        // Spawn 1/4-scale dropped ItemEntity at block center with upward and lateral velocity
+                        self.item_entities.spawn_block_drop(pos, block);
                     }
                     MiningUpdateResult::Idle => {}
+                }
+
+                // Update dropped items: AABB collision, gravity, player magnetism, and pickup resolution
+                let pickups = self.item_entities.update(
+                    self.camera.eye,
+                    &mut self.inventory,
+                    &self.world,
+                );
+                for pickup_pos in pickups {
+                    let pitch = self.audio.random_pitch(1.3);
+                    self.audio.play_spatial(
+                        SoundEvent::Pop,
+                        pickup_pos,
+                        self.camera.eye,
+                        self.camera.forwards(),
+                        self.camera.up(),
+                        1.0,
+                        pitch,
+                    );
                 }
 
                 if let Some(ctx) = &mut self.render_ctx {
@@ -610,6 +575,7 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                         camera_right,
                         camera_up,
                         Some(&self.stats),
+                        self.item_entities.active_items(),
                     ) {
                         eprintln!("Render error: {e:?}");
                     }

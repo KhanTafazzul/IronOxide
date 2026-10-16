@@ -276,6 +276,63 @@ impl PlayerInventory {
         inv
     }
 
+    /// Adds an item stack to player inventory (hotbar first, then main storage).
+    /// Returns Some(remaining_stack) if inventory is full, or None if fully added.
+    pub fn add_item(&mut self, mut stack: ItemStack) -> Option<ItemStack> {
+        if stack.is_empty() {
+            return None;
+        }
+
+        // 1. Try to merge with existing stacks in hotbar
+        for slot in &mut self.hotbar {
+            if let Some(existing) = slot {
+                if existing.can_stack_with(&stack) && existing.count < existing.max_stack {
+                    let space = existing.max_stack - existing.count;
+                    let to_add = stack.count.min(space);
+                    existing.count += to_add;
+                    stack.count -= to_add;
+                    if stack.count == 0 {
+                        return None;
+                    }
+                }
+            }
+        }
+
+        // 2. Try to merge with existing stacks in main storage
+        for slot in &mut self.main {
+            if let Some(existing) = slot {
+                if existing.can_stack_with(&stack) && existing.count < existing.max_stack {
+                    let space = existing.max_stack - existing.count;
+                    let to_add = stack.count.min(space);
+                    existing.count += to_add;
+                    stack.count -= to_add;
+                    if stack.count == 0 {
+                        return None;
+                    }
+                }
+            }
+        }
+
+        // 3. Place into first empty slot in hotbar
+        for slot in &mut self.hotbar {
+            if slot.is_none() {
+                *slot = Some(stack);
+                return None;
+            }
+        }
+
+        // 4. Place into first empty slot in main storage
+        for slot in &mut self.main {
+            if slot.is_none() {
+                *slot = Some(stack);
+                return None;
+            }
+        }
+
+        // Inventory is completely full; return remainder
+        Some(stack)
+    }
+
     /// Retrieve an item from the unified slot index (0..45)
     pub fn get_slot(&self, index: usize) -> Option<ItemStack> {
         match index {

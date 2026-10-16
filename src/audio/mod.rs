@@ -32,6 +32,7 @@ pub enum SoundEvent {
     WoodBreak,
     WaterSplash,
     PlayerPunchAir,
+    Pop,
 }
 
 /// SoundType definition matching net.minecraft.world.level.block.SoundType (dec.class)
@@ -212,6 +213,7 @@ impl AudioSystem {
         self.ensure_sound(SoundEvent::WoodBreak, Self::synth_wood_break);
         self.ensure_sound(SoundEvent::WaterSplash, Self::synth_water_splash);
         self.ensure_sound(SoundEvent::PlayerPunchAir, Self::synth_punch_air);
+        self.ensure_sound(SoundEvent::Pop, Self::synth_pop);
     }
 
     fn ensure_sound(&mut self, event: SoundEvent, synth_fn: fn(u32) -> Vec<f32>) {
@@ -599,6 +601,24 @@ impl AudioSystem {
 
             let swoosh = (i as f32 * 0.04).sin() * 0.4 + noise * 0.3;
             samples.push(swoosh * env * 0.35);
+        }
+        samples
+    }
+
+    /// Pop: Item pickup pop sound (crisp rising pitch chirp matching vanilla)
+    pub fn synth_pop(sample_rate: u32) -> Vec<f32> {
+        let len = (sample_rate as f32 * 0.08) as usize;
+        let mut samples = Vec::with_capacity(len);
+        let mut phase = 0.0f32;
+
+        for i in 0..len {
+            let t = i as f32 / len as f32;
+            let env = (1.0 - t).powf(1.8);
+            // Frequency sweeps rapidly up from ~450 Hz to ~1400 Hz
+            let freq = 450.0 + 950.0 * t.powf(0.8);
+            phase += 2.0 * std::f32::consts::PI * freq / (sample_rate as f32);
+            let tone = phase.sin();
+            samples.push(tone * env * 0.5);
         }
         samples
     }

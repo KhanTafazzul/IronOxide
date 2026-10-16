@@ -273,7 +273,7 @@
 
 ```text
 running 135 tests
-test result: ok. 135 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.92s
+test result: ok. 135 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.09s
 ```
 
 All subsystems have dedicated unit and integration tests covering:
@@ -286,6 +286,79 @@ All subsystems have dedicated unit and integration tests covering:
 - Camera perspective switching and frustum culling
 - Barycentric colormap UV sampling and 3x3 kernel smoothing
 - Weather state machine transitions, temperature lapse rate, and rain/snow geometry generation
+- Tile entities (Chest 27 slots, shift-click transfer, NBT persistence)
+
+---
+
+## 🚀 Upcoming Tasks & Tomorrow's Execution Roadmap
+
+When resuming tomorrow, execution will start directly from **Task 27**:
+
+### 🎯 [READY FOR TOMORROW] Task 27: Comprehensive Block Registry & Voxel Models
+- **Target JAR**: `client.jar`
+- **Target Files**:
+  - `src/world/block_registry.rs` (new registry module)
+  - `src/world/voxel_shape.rs` (or `src/render/model.rs`)
+  - `src/render/atlas.rs`, `src/storage/region.rs`, `src/game/mining/mod.rs`, `src/audio/mod.rs`
+- **Decompiled References**:
+  - `net.minecraft.world.level.block.Blocks`
+  - `net.minecraft.world.level.block.state.BlockBehaviour$Properties`
+- **Detailed Specifications**:
+  1. **Expanded BlockId Enum across all 3 Dimensions**:
+     - **Overworld**: Wood variants (Oak, Birch, Spruce, Dark Oak, Jungle, Acacia), Stone types (Cobblestone, Andesite, Granite, Diorite, Deepslate), Ores (Coal, Iron, Copper, Gold, Redstone, Lapis, Diamond, Emerald), Glass, Obsidian, Sand, Gravel, Bricks.
+     - **Nether**: Netherrack, Soul Sand, Soul Soil, Basalt, Polished Basalt, Blackstone, Nether Bricks, Glowstone, Crimson & Warped Nylium, Stems, Hyphae, and Wart Blocks.
+     - **The End**: End Stone, End Stone Bricks, Purpur Block, Purpur Pillar, End Rod, Purpur Stairs, End Portal Frame.
+  2. **Voxel Properties Metadata per Block**:
+     - `is_solid`: Affects entity collision.
+     - `is_transparent`: Dictates face-culling (Glass, Leaves, Water, Air, etc.).
+     - `light_emission`: u8 (0..15) (Torch = 14, Glowstone = 15, Sea Lantern = 15, Lava = 15, Crying Obsidian = 10, Redstone Torch = 7).
+     - `blast_resistance`: f32 (Obsidian = 1200.0, Stone = 6.0, Wood = 2.0, Dirt = 0.5).
+     - `hardness`: f32 (Obsidian = 50.0, Stone = 1.5, Wood = 2.0, Dirt = 0.5, Bedrock = -1.0).
+     - `sound_type`: Dig/Step sound family (Wood, Stone, Sand, Grass, Glass, Metal, Gravel, Basalt, SoulSand).
+     - `tool_required`: ToolType (Pickaxe, Axe, Shovel, Hoe, None).
+     - `min_harvest_tier`: HarvestTier (Hand, Wood, Stone, Iron, Diamond, Netherite).
+  3. **Non-Cube Voxel Shapes & Selection Boxes**:
+     - Full cube: $[0.0, 0.0, 0.0] \rightarrow [1.0, 1.0, 1.0]$
+     - Slab: $[0.0, 0.0, 0.0] \rightarrow [1.0, 0.5, 1.0]$
+     - Stairs: Compound bounding boxes (base slab $[0, 0, 0] \rightarrow [1, 0.5, 1]$ + upper half step)
+     - Torch: Centered thin pillar $[0.4, 0.0, 0.4] \rightarrow [0.6, 0.6, 0.6]$
+     - End Rod: Centered rod $[0.375, 0.0, 0.375] \rightarrow [0.625, 1.0, 0.625]$
+     - Carpet / Snow layer: $[0.0, 0.0, 0.0] \rightarrow [1.0, 0.0625, 1.0]$
+  4. **System Sync**:
+     - Sync texture atlas sprite names and face UVs.
+     - Update Anvil `.mca` region block string-to-ID parser for all new blocks.
+     - Wire sound events, mining speeds, and particle colors.
+
+---
+
+### 📋 Task 28: Furnace & Smelting Block Entity with Burn Time & Recipe Book
+- **Modules**: `src/world/tile_entity.rs`, `src/render/gui/furnace_screen.rs`, `src/game/crafting/smelting.rs`
+- **Features**:
+  - `FurnaceTileEntity`: 3 slots (Input, Fuel, Output), `burn_time`, `cook_time`, `total_cook_time` (200 ticks standard).
+  - Vanilla fuel burn ticks: Coal/Charcoal = 1600 ticks, Wood = 300 ticks, Lava Bucket = 20,000 ticks.
+  - Smelting recipes: Raw Iron $\rightarrow$ Iron Ingot, Cobblestone $\rightarrow$ Stone, Sand $\rightarrow$ Glass, Logs $\rightarrow$ Charcoal.
+  - Flame progress & arrow progress GUI rendering with dynamic texture atlas UVs.
+
+---
+
+### 📋 Task 29: Redstone Wire, Repeater & Power Propagation Engine
+- **Modules**: `src/world/redstone/`, `src/world/block_registry.rs`
+- **Features**:
+  - Signal strength simulation ($0 \le \text{power} \le 15$) with step-down attenuation.
+  - Redstone Dust, Redstone Torch (inversion logic), Lever, Button, Pressure Plate.
+  - Redstone Repeaters with 1 to 4 tick delay (2 to 8 game ticks) and signal booster.
+  - Redstone wire dynamic connectivity cross/line meshing.
+
+---
+
+### 📋 Task 30: Procedural Multi-Biome Terrain World Generator
+- **Modules**: `src/world/generation/`, `src/world/noise.rs`
+- **Features**:
+  - Multi-octave Perlin / Simplex noise generator with seed hashing.
+  - Continentalness, Erosion, and Peaks/Valleys noise splines matching Minecraft 1.18+ terrain format.
+  - Surface builder: Grass/Dirt for Plains/Forests, Sand/Sandstone for Deserts, Snow/Ice for Tundras.
+  - 3D cave noise carvers (spaghetti & cheese caves) carving under $y = 64$.
+  - Ore generation clusters (Coal, Iron, Gold, Redstone, Diamond at deepslate levels).
 
 ---
 

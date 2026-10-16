@@ -213,7 +213,7 @@ impl DynamicLightPipeline {
         atlas_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
         // 1. Dynamic light uniform buffer
-        let uniform = DynamicLightUniform::default();
+        let _uniform = DynamicLightUniform::default();
         let dynamic_light_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Dynamic Light Uniform Buffer"),
             size: std::mem::size_of::<DynamicLightUniform>() as wgpu::BufferAddress,

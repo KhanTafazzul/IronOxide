@@ -243,7 +243,7 @@ impl<'a> GameApp<'a> {
         }
 
         self.player.tick(&input, &self.world);
-        self.camera.eye = self.player.eye_position();
+        self.camera.setup(self.player.position, Some(&self.world));
 
         // 3D Footstep sound trigger based on walking displacement
         let current_pos = self.player.position;
@@ -296,8 +296,8 @@ impl<'a> GameApp<'a> {
     /// Right-Click: Place selected block against the targeted face and trigger immediate re-meshing
     fn place_targeted_block(&mut self) {
         if let Some(hit) = raycast_voxel(
-            self.camera.eye,
-            self.camera.forwards(),
+            self.player.eye_position(),
+            self.camera.player_forwards(),
             DEFAULT_MAX_REACH,
             &self.world,
         ) {
@@ -478,6 +478,11 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                     KeyCode::F3 if pressed => {
                         self.debug_overlay.toggle();
                     }
+                    KeyCode::F5 if pressed => {
+                        let mode = self.camera.cycle_mode();
+                        self.camera.setup(self.player.position, Some(&self.world));
+                        println!("[Camera] Switched perspective to {:?}", mode);
+                    }
                     KeyCode::Escape if pressed => {
                         if let Some(ctx) = &self.render_ctx {
                             let window = Arc::clone(&ctx.window);
@@ -535,8 +540,8 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                     None
                 } else {
                     raycast_voxel(
-                        self.camera.eye,
-                        self.camera.forwards(),
+                        self.player.eye_position(),
+                        self.camera.player_forwards(),
                         DEFAULT_MAX_REACH,
                         &self.world,
                     )
@@ -647,9 +652,20 @@ impl<'a> ApplicationHandler for GameApp<'a> {
 
                 if let Some(ctx) = &mut self.render_ctx {
                     ctx.effects_renderer.particles.update(dt, &self.world);
+                    self.camera.setup(self.player.position, Some(&self.world));
                     ctx.update_camera(&self.camera);
                     let camera_right = self.camera.right();
                     let camera_up = self.camera.up();
+
+                    // Frustum culling of 16x16x16 ChunkSection bounding boxes
+                    let aspect = ctx.config.width as f32 / ctx.config.height as f32;
+                    let vp = self.camera.view_proj_matrix(aspect);
+                    let frustum = render::culling::Frustum::from_view_proj(vp);
+
+                    let active_meshes: Vec<&ChunkMesh> = self.meshes.iter()
+                        .filter(|(sec_pos, _)| frustum.intersects_chunk_section(**sec_pos))
+                        .map(|(_, mesh)| mesh)
+                        .collect();
 
                     let fps = if dt > 0.0001 { 1.0 / dt } else { 60.0 };
                     let frame_time_ms = dt * 1000.0;
@@ -664,8 +680,8 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                         let (rss, total) = DebugOverlay::query_memory_stats();
                         let gpu_name = ctx.adapter_info.name.clone();
                         let gpu_backend = format!("{:?}", ctx.adapter_info.backend);
-                        let rendered_quads: usize = self.meshes.values().map(|m| m.quad_count()).sum();
-                        let draw_calls = self.meshes.values().filter(|m| !m.is_empty()).count() + 4;
+                        let rendered_quads: usize = active_meshes.iter().map(|m| m.quad_count()).sum();
+                        let draw_calls = active_meshes.iter().filter(|m| !m.is_empty()).count() + 4;
 
                         Some(DebugMetrics {
                             engine_version: "IronOxide 0.1.0".to_string(),
@@ -690,8 +706,7 @@ impl<'a> ApplicationHandler for GameApp<'a> {
 
                     let main_hand = self.inventory.hotbar[self.active_slot];
                     let off_hand = self.inventory.offhand;
-                    let dynamic_light = render::calculate_dynamic_light(main_hand, off_hand, self.camera.eye);
-                    let active_meshes: Vec<&ChunkMesh> = self.meshes.values().collect();
+                    let dynamic_light = render::calculate_dynamic_light(main_hand, off_hand, self.player.eye_position());
 
                     if let Err(e) = ctx.render(
                         self.active_slot,
@@ -725,6 +740,7 @@ impl<'a> ApplicationHandler for GameApp<'a> {
             let new_yaw = self.camera.yaw + (dx as f32) * sensitivity;
             let new_pitch = self.camera.pitch - (dy as f32) * sensitivity;
             self.camera.set_rotation(new_yaw, new_pitch);
+            self.camera.setup(self.player.position, Some(&self.world));
         }
     }
 }

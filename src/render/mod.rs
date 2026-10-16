@@ -1,6 +1,7 @@
 pub mod atlas;
 pub mod camera;
 pub mod context;
+pub mod culling;
 pub mod dynamic_lights;
 pub mod effects;
 pub mod entity_renderer;
@@ -9,11 +10,12 @@ pub mod mesher;
 pub mod models;
 pub mod uniforms;
 
+pub use camera::{Camera, CameraMode};
+pub use culling::{Frustum, FrustumPlane};
 pub use dynamic_lights::{calculate_dynamic_light, DynamicLightPipeline, DynamicLightUniform};
 
 #[allow(unused_imports)]
 pub use atlas::{BlockType, Direction, TextureAtlas, TextureRect};
-pub use camera::Camera;
 pub use context::RenderContext;
 #[allow(unused_imports)]
 pub use effects::{EffectVertex, EffectsRenderer, Particle, ParticleSystem};

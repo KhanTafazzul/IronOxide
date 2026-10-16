@@ -1,4 +1,5 @@
 pub mod inventory;
+pub mod mining;
 pub mod physics;
 pub mod raycast;
 pub mod world;
@@ -9,6 +10,8 @@ pub use inventory::{
     HOTBAR_SLOT_END, HOTBAR_SLOT_START, INV_SLOT_END, INV_SLOT_START, RESULT_SLOT,
     SHIELD_SLOT, TOTAL_SLOTS,
 };
+#[allow(unused_imports)]
+pub use mining::{calculate_break_time, get_block_hardness, BlockMiningTracker, MiningUpdateResult};
 #[allow(unused_imports)]
 pub use physics::{Aabb, PlayerInput, PlayerPhysics};
 #[allow(unused_imports)]

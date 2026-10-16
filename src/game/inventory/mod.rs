@@ -28,6 +28,8 @@ pub const ITEM_GLASS: u16 = 11;
 pub const ITEM_BRICKS: u16 = 12;
 pub const ITEM_CRAFTING_TABLE: u16 = 13;
 pub const ITEM_STICK: u16 = 14;
+pub const ITEM_WOODEN_PICKAXE: u16 = 15;
+pub const ITEM_WOODEN_AXE: u16 = 16;
 
 // REA Slot Constants from cjc.class
 pub const RESULT_SLOT: usize = 0;

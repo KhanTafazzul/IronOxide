@@ -3,6 +3,7 @@ use winit::window::Window;
 use wgpu::util::DeviceExt;
 use crate::render::atlas::TextureAtlas;
 use crate::render::camera::Camera;
+use crate::render::effects::EffectsRenderer;
 use crate::render::gui::{GuiAtlas, GuiRenderer};
 use crate::render::uniforms::CameraUniform;
 
@@ -25,6 +26,7 @@ pub struct RenderContext<'w> {
     pub atlas_bind_group: wgpu::BindGroup,
     pub gui_atlas: Arc<GuiAtlas>,
     pub gui_renderer: GuiRenderer,
+    pub effects_renderer: EffectsRenderer,
 }
 
 impl<'w> RenderContext<'w> {
@@ -99,6 +101,14 @@ impl<'w> RenderContext<'w> {
         let gui_atlas = Arc::new(GuiAtlas::load_or_create(None));
         let gui_renderer = GuiRenderer::new(&device, &queue, config.format, Arc::clone(&gui_atlas));
 
+        // REA Verified: 3D Destroy crack overlay & Particle System setup
+        let effects_renderer = EffectsRenderer::new(
+            &device,
+            config.format,
+            &camera_bind_group_layout,
+            &atlas_bind_group_layout,
+        );
+
         Ok(Self {
             window,
             surface,
@@ -118,6 +128,7 @@ impl<'w> RenderContext<'w> {
             atlas_bind_group,
             gui_atlas,
             gui_renderer,
+            effects_renderer,
         })
     }
 
@@ -144,6 +155,9 @@ impl<'w> RenderContext<'w> {
         &mut self,
         active_slot: usize,
         inventory_gui: Option<(&crate::render::gui::InventoryGui, &crate::game::inventory::PlayerInventory)>,
+        mining_target: Option<(glam::IVec3, usize)>,
+        camera_right: glam::Vec3,
+        camera_up: glam::Vec3,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let output = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(tex) | wgpu::CurrentSurfaceTexture::Suboptimal(tex) => tex,
@@ -192,6 +206,19 @@ impl<'w> RenderContext<'w> {
                 multiview_mask: None,
             });
         }
+
+        // 3D Effects pass: Destroy crack overlay & Particle billboards
+        self.effects_renderer.render(
+            &mut encoder,
+            &self.queue,
+            &view,
+            &self.camera_bind_group,
+            &self.atlas_bind_group,
+            &self.atlas,
+            camera_right,
+            camera_up,
+            mining_target,
+        );
 
         // 2D HUD and/or Inventory pass (executes after 3D pass with LoadOp::Load without clearing color attachment)
         self.gui_renderer.render(

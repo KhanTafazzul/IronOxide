@@ -150,6 +150,16 @@ impl TextureAtlas {
                         "sand",
                         "glass",
                         "bricks",
+                        "destroy_stage_0",
+                        "destroy_stage_1",
+                        "destroy_stage_2",
+                        "destroy_stage_3",
+                        "destroy_stage_4",
+                        "destroy_stage_5",
+                        "destroy_stage_6",
+                        "destroy_stage_7",
+                        "destroy_stage_8",
+                        "destroy_stage_9",
                     ];
 
                     for key in texture_keys {
@@ -206,6 +216,32 @@ impl TextureAtlas {
                         let g = color[1].saturating_add(shade);
                         let b = color[2].saturating_add(shade);
                         img.put_pixel(x, y, Rgba([r, g, b, color[3]]));
+                    }
+                }
+                img
+            });
+        }
+
+        // Procedural fallbacks for destroy stage crack overlays 0..=9
+        for stage in 0..10 {
+            let name = format!("destroy_stage_{stage}");
+            sprites.entry(name).or_insert_with(|| {
+                let mut img = RgbaImage::new(Self::TILE_SIZE, Self::TILE_SIZE);
+                let threshold = (stage + 1) as u32 * 2;
+                for y in 0..Self::TILE_SIZE {
+                    for x in 0..Self::TILE_SIZE {
+                        // Procedural jagged crack lines radiating from center (8, 8)
+                        let dx = (x as i32 - 8).abs() as u32;
+                        let dy = (y as i32 - 8).abs() as u32;
+                        let dist = dx + dy;
+                        let is_crack = (dist <= threshold && ((x * 7 + y * 13) % 5 == 0))
+                            || (dx == dy && dist <= threshold + 2);
+
+                        if is_crack {
+                            img.put_pixel(x, y, Rgba([15, 15, 15, 210]));
+                        } else {
+                            img.put_pixel(x, y, Rgba([0, 0, 0, 0]));
+                        }
                     }
                 }
                 img
@@ -271,6 +307,14 @@ impl TextureAtlas {
             .copied()
             .or_else(|| self.sprites.get("missing").copied())
             .unwrap_or(TextureRect::new(0.0, 0.0, 1.0, 1.0))
+    }
+
+    /// REA Verified: net.minecraft.client.renderer.block.BlockModelShaper (fua.class)
+    /// Returns normalized UV coordinates for destroy crack stage (0 to 9)
+    pub fn get_destroy_stage_uv(&self, stage: usize) -> [f32; 4] {
+        let name = format!("destroy_stage_{}", stage.min(9));
+        let rect = self.get_sprite(&name);
+        [rect.u_min, rect.v_min, rect.u_max, rect.v_max]
     }
 
     /// REA Verified: net.minecraft.client.resources.model.ModelBakery (ggs.class)

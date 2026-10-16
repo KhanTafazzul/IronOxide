@@ -122,6 +122,11 @@ impl Camera {
         self.left
     }
 
+    /// Returns the normalized right vector
+    pub fn right(&self) -> Vec3 {
+        -self.left
+    }
+
     /// Computes the Camera View Matrix
     /// Transforms world space coordinates to camera space
     pub fn view_matrix(&self) -> Mat4 {

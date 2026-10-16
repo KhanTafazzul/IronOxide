@@ -12,7 +12,10 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
 
 use game::inventory::{ItemStack, PlayerInventory};
-use game::{raycast_voxel, Aabb, PlayerInput, PlayerPhysics, World, DEFAULT_MAX_REACH};
+use game::{
+    raycast_voxel, Aabb, BlockMiningTracker, MiningUpdateResult, PlayerInput, PlayerPhysics, World,
+    DEFAULT_MAX_REACH,
+};
 use render::atlas::{BlockType, TextureAtlas};
 use render::gui::inventory::InventoryGui;
 use render::mesher::{greedy_mesh_section, ChunkMesh};
@@ -30,6 +33,8 @@ struct GameApp<'a> {
     hotbar_slots: [BlockType; 9],
     inventory: PlayerInventory,
     inventory_gui: InventoryGui,
+    mining_tracker: BlockMiningTracker,
+    left_mouse_held: bool,
     mouse_captured: bool,
     // Movement key states
     key_w: bool,
@@ -88,6 +93,7 @@ impl<'a> GameApp<'a> {
             }
         }
         let inventory_gui = InventoryGui::new();
+        let mining_tracker = BlockMiningTracker::new();
 
         Self {
             render_ctx: None,
@@ -101,6 +107,8 @@ impl<'a> GameApp<'a> {
             hotbar_slots,
             inventory,
             inventory_gui,
+            mining_tracker,
+            left_mouse_held: false,
             mouse_captured: false,
             key_w: false,
             key_s: false,
@@ -219,32 +227,11 @@ impl<'a> GameApp<'a> {
         } else {
             let _ = window.set_cursor_grab(CursorGrabMode::None);
             window.set_cursor_visible(true);
+            self.left_mouse_held = false;
+            self.mining_tracker.reset();
         }
     }
 
-    /// Left-Click: Destroy targeted block, drop item into inventory, and trigger re-meshing
-    fn break_targeted_block(&mut self) {
-        if let Some(hit) = raycast_voxel(
-            self.camera.eye,
-            self.camera.forwards(),
-            DEFAULT_MAX_REACH,
-            &self.world,
-        ) {
-            let broken_block = self.world.get_block(hit.block_pos);
-            println!("Left Click: Destroying {:?} at {:?}", broken_block, hit.block_pos);
-            let affected = self.world.set_block_at(hit.block_pos, BlockType::Air);
-            self.remesh_sections(&affected);
-
-            // Vanilla-style block drop
-            let drop = match broken_block {
-                BlockType::GrassBlock => ItemStack::new(game::inventory::ITEM_DIRT, 1),
-                BlockType::Stone => ItemStack::new(game::inventory::ITEM_COBBLESTONE, 1),
-                other => ItemStack::from_block(other, 1)
-                    .unwrap_or(ItemStack::new(game::inventory::ITEM_DIRT, 1)),
-            };
-            self.add_item_to_inventory(drop);
-        }
-    }
 
     /// Right-Click: Place selected block against the targeted face and trigger immediate re-meshing
     fn place_targeted_block(&mut self) {
@@ -354,25 +341,35 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                 }
             }
             WindowEvent::MouseInput { button, state, .. } => {
-                if state == ElementState::Pressed {
-                    if self.inventory_gui.is_open {
-                        self.inventory_gui.handle_mouse_click(button, &mut self.inventory);
-                        // Update active block from current hotbar slot
-                        if let Some(stack) = self.inventory.hotbar[self.active_slot] {
-                            if let Some(block) = stack.to_block() {
-                                self.selected_block = block;
+                match state {
+                    ElementState::Pressed => {
+                        if self.inventory_gui.is_open {
+                            self.inventory_gui.handle_mouse_click(button, &mut self.inventory);
+                            // Update active block from current hotbar slot
+                            if let Some(stack) = self.inventory.hotbar[self.active_slot] {
+                                if let Some(block) = stack.to_block() {
+                                    self.selected_block = block;
+                                }
+                            }
+                        } else if !self.mouse_captured {
+                            if let Some(ctx) = &self.render_ctx {
+                                let window = Arc::clone(&ctx.window);
+                                self.toggle_mouse_grab(&window);
+                            }
+                        } else {
+                            match button {
+                                MouseButton::Left => {
+                                    self.left_mouse_held = true;
+                                }
+                                MouseButton::Right => self.place_targeted_block(),
+                                _ => {}
                             }
                         }
-                    } else if !self.mouse_captured {
-                        if let Some(ctx) = &self.render_ctx {
-                            let window = Arc::clone(&ctx.window);
-                            self.toggle_mouse_grab(&window);
-                        }
-                    } else {
-                        match button {
-                            MouseButton::Left => self.break_targeted_block(),
-                            MouseButton::Right => self.place_targeted_block(),
-                            _ => {}
+                    }
+                    ElementState::Released => {
+                        if button == MouseButton::Left {
+                            self.left_mouse_held = false;
+                            self.mining_tracker.reset();
                         }
                     }
                 }
@@ -394,6 +391,8 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                             let window = Arc::clone(&ctx.window);
                             self.inventory_gui.toggle(&window);
                             self.mouse_captured = !self.inventory_gui.is_open;
+                            self.left_mouse_held = false;
+                            self.mining_tracker.reset();
                             if !self.inventory_gui.is_open {
                                 if let Some(stack) = self.inventory.hotbar[self.active_slot] {
                                     if let Some(block) = stack.to_block() {
@@ -409,6 +408,8 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                             if self.inventory_gui.is_open {
                                 self.inventory_gui.close(&window);
                                 self.mouse_captured = true;
+                                self.left_mouse_held = false;
+                                self.mining_tracker.reset();
                                 if let Some(stack) = self.inventory.hotbar[self.active_slot] {
                                     if let Some(block) = stack.to_block() {
                                         self.selected_block = block;
@@ -445,11 +446,61 @@ impl<'a> ApplicationHandler for GameApp<'a> {
 
                 self.update_physics(dt);
 
+                // REA Verified: Mining progress tracking & block break resolution
+                let raycast_hit = if self.inventory_gui.is_open || !self.mouse_captured {
+                    None
+                } else {
+                    raycast_voxel(
+                        self.camera.eye,
+                        self.camera.forwards(),
+                        DEFAULT_MAX_REACH,
+                        &self.world,
+                    )
+                };
+
+                let held_item = self.inventory.hotbar[self.active_slot];
+                let raycast_target = raycast_hit.map(|h| (h.block_pos, h.face, self.world.get_block(h.block_pos)));
+
+                let mining_result = self.mining_tracker.update(dt, self.left_mouse_held, raycast_target, held_item);
+                let mut active_mining_target = None;
+
+                match mining_result {
+                    MiningUpdateResult::Mining { pos, stage, .. } => {
+                        active_mining_target = Some((pos, stage));
+                    }
+                    MiningUpdateResult::Broken { pos, block, .. } => {
+                        println!("Block broken: {:?} at {:?}", block, pos);
+                        let affected = self.world.set_block_at(pos, BlockType::Air);
+                        self.remesh_sections(&affected);
+
+                        // Spawn 12-20 physics-affected voxel particles with random outward velocities
+                        if let Some(ctx) = &mut self.render_ctx {
+                            ctx.effects_renderer.particles.spawn_block_break(pos, block);
+                        }
+
+                        // Vanilla-style block drop
+                        let drop = match block {
+                            BlockType::GrassBlock => ItemStack::new(game::inventory::ITEM_DIRT, 1),
+                            BlockType::Stone => ItemStack::new(game::inventory::ITEM_COBBLESTONE, 1),
+                            other => ItemStack::from_block(other, 1)
+                                .unwrap_or(ItemStack::new(game::inventory::ITEM_DIRT, 1)),
+                        };
+                        self.add_item_to_inventory(drop);
+                    }
+                    MiningUpdateResult::Idle => {}
+                }
+
                 if let Some(ctx) = &mut self.render_ctx {
+                    ctx.effects_renderer.particles.update(dt, &self.world);
                     ctx.update_camera(&self.camera);
+                    let camera_right = self.camera.right();
+                    let camera_up = self.camera.up();
                     if let Err(e) = ctx.render(
                         self.active_slot,
                         Some((&self.inventory_gui, &self.inventory)),
+                        active_mining_target,
+                        camera_right,
+                        camera_up,
                     ) {
                         eprintln!("Render error: {e:?}");
                     }

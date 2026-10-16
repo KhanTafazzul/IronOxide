@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 bytemuck = "1.25.2"
+flate2 = "1.1"
 glam = "0.34.1"
 image = "0.25.10"
 pollster = "1.0.1"

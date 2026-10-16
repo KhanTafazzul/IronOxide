@@ -90,6 +90,16 @@ impl NibbleArray {
             self.data[byte_idx] = (self.data[byte_idx] & 0x0F) | (v << 4);
         }
     }
+
+    #[inline(always)]
+    pub fn raw_data(&self) -> &[u8] {
+        &self.data
+    }
+
+    #[inline(always)]
+    pub fn raw_data_mut(&mut self) -> &mut [u8] {
+        &mut self.data
+    }
 }
 
 /// Dual 4-bit nibble light storage per voxel (Block Light 0-15 and Sky Light 0-15)

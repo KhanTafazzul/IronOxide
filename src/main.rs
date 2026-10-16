@@ -1,6 +1,7 @@
 mod audio;
 mod game;
 mod render;
+pub mod storage;
 pub mod world;
 
 use std::collections::HashMap;
@@ -24,12 +25,15 @@ use render::atlas::{BlockType, TextureAtlas};
 use render::gui::inventory::InventoryGui;
 use render::mesher::{greedy_mesh_section, ChunkMesh};
 use render::{Camera, RenderContext};
+use storage::WorldStorageManager;
 
 struct GameApp<'a> {
     render_ctx: Option<RenderContext<'a>>,
     camera: Camera,
     player: PlayerPhysics,
     world: World,
+    storage: WorldStorageManager,
+    last_save_time: Instant,
     atlas: Arc<TextureAtlas>,
     meshes: HashMap<glam::IVec3, ChunkMesh>,
     selected_block: BlockType,
@@ -60,31 +64,51 @@ struct GameApp<'a> {
 impl<'a> GameApp<'a> {
     fn new() -> Self {
         let atlas = Arc::new(TextureAtlas::load_or_create(None));
+        let mut storage = WorldStorageManager::new("WorldName");
         let mut world = World::new();
 
-        // Build a ground platform at y = 0
-        for x in 0..16 {
-            for z in 0..16 {
-                world.set_block_at(glam::IVec3::new(x, 0, z), BlockType::GrassBlock);
+        // Check if spawn chunk column (0, 0) exists in persistent .mca region storage
+        let mut loaded = false;
+        if let Ok(Some(sections)) = storage.load_chunk_column(0, 0) {
+            println!("[Storage] Loaded {} sections from Anvil region file for chunk (0, 0)", sections.len());
+            for (sec_y, sec, light_opt) in sections {
+                let sec_pos = glam::IVec3::new(0, sec_y, 0);
+                world.sections.insert(sec_pos, sec);
+                if let Some(light) = light_opt {
+                    world.lighting.sections.insert(sec_pos, light);
+                }
             }
+            loaded = true;
         }
-        // Stepping blocks to test interaction and step-up
-        world.set_block_at(glam::IVec3::new(8, 1, 8), BlockType::Stone);
-        world.set_block_at(glam::IVec3::new(8, 1, 9), BlockType::Cobblestone);
-        // Point light source: Torch emits light level 14
-        world.set_block_at(glam::IVec3::new(8, 2, 8), BlockType::Torch);
 
-        // Initialize daylight / skylight across the spawn platform
-        for x in 0..16 {
-            for z in 0..16 {
-                world.lighting.update_skylight_column(x, z, 15, 0, &world.sections);
+        if !loaded {
+            // Build initial ground platform at y = 0
+            for x in 0..16 {
+                for z in 0..16 {
+                    world.set_block_at(glam::IVec3::new(x, 0, z), BlockType::GrassBlock);
+                }
             }
+            // Stepping blocks to test interaction and step-up
+            world.set_block_at(glam::IVec3::new(8, 1, 8), BlockType::Stone);
+            world.set_block_at(glam::IVec3::new(8, 1, 9), BlockType::Cobblestone);
+            // Point light source: Torch emits light level 14
+            world.set_block_at(glam::IVec3::new(8, 2, 8), BlockType::Torch);
+
+            // Initialize daylight / skylight across the spawn platform
+            for x in 0..16 {
+                for z in 0..16 {
+                    world.lighting.update_skylight_column(x, z, 15, 0, &world.sections);
+                }
+            }
+
+            // Mark spawn chunk dirty so it will be saved to saves/WorldName/region/r.0.0.mca
+            storage.mark_dirty(0, 0);
         }
 
         let mut meshes = HashMap::new();
-        if let Some(sec) = world.sections.get(&glam::IVec3::ZERO) {
+        for (&sec_pos, sec) in &world.sections {
             let mesh = greedy_mesh_section(sec, &atlas, &world);
-            meshes.insert(glam::IVec3::ZERO, mesh);
+            meshes.insert(sec_pos, mesh);
         }
 
         let spawn_pos = glam::Vec3::new(8.0, 1.0, 5.0);
@@ -127,6 +151,8 @@ impl<'a> GameApp<'a> {
             camera,
             player,
             world,
+            storage,
+            last_save_time: Instant::now(),
             atlas,
             meshes,
             selected_block,
@@ -271,6 +297,7 @@ impl<'a> GameApp<'a> {
                 );
                 let affected = self.world.set_block_at(place_pos, self.selected_block);
                 self.remesh_sections(&affected);
+                self.storage.mark_sections_dirty(&affected);
 
                 // Consume placed block from hotbar slot
                 if let Some(mut stack) = self.inventory.hotbar[self.active_slot] {
@@ -328,6 +355,7 @@ impl<'a> ApplicationHandler for GameApp<'a> {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
+                self.storage.flush_all(&self.world);
                 event_loop.exit();
             }
             WindowEvent::Resized(physical_size) => {
@@ -521,6 +549,7 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                         println!("Block broken: {:?} at {:?}", block, pos);
                         let affected = self.world.set_block_at(pos, BlockType::Air);
                         self.remesh_sections(&affected);
+                        self.storage.mark_sections_dirty(&affected);
 
                         // Physical activity trigger: Breaking a block adds 0.005 exhaustion
                         self.stats.on_block_break();
@@ -547,6 +576,12 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                         self.item_entities.spawn_block_drop(pos, block);
                     }
                     MiningUpdateResult::Idle => {}
+                }
+
+                // Asynchronously flush modified chunks every 2 seconds to prevent game freezes
+                if now.duration_since(self.last_save_time) >= std::time::Duration::from_secs(2) {
+                    self.last_save_time = now;
+                    self.storage.flush_dirty(&self.world);
                 }
 
                 // Update dropped items: AABB collision, gravity, player magnetism, and pickup resolution

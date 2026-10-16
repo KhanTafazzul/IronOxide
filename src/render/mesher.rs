@@ -118,11 +118,21 @@ impl ChunkSection {
     }
 
     #[inline(always)]
+    pub fn get(&self, x: usize, y: usize, z: usize) -> BlockType {
+        self.get_block(x, y, z)
+    }
+
+    #[inline(always)]
     pub fn set_block(&mut self, x: usize, y: usize, z: usize, block: BlockType) {
         if x < SECTION_SIZE && y < SECTION_SIZE && z < SECTION_SIZE {
             let idx = Self::index(x, y, z);
             self.blocks[idx] = block;
         }
+    }
+
+    #[inline(always)]
+    pub fn set(&mut self, x: usize, y: usize, z: usize, block: BlockType) {
+        self.set_block(x, y, z, block);
     }
 }
 

@@ -9,12 +9,15 @@ use crate::render::mesher::{BlockReader, ChunkSection, SECTION_SIZE};
 use crate::world::fluids::{FluidEngine, FluidState, FluidType, FluidWorldAccess};
 use crate::world::lighting::LightEngine;
 
+use crate::world::weather::WeatherManager;
+
 /// Multi-section voxel world implementing global BlockReader and LightEngine
 #[derive(Clone, Debug)]
 pub struct World {
     pub sections: HashMap<IVec3, ChunkSection>,
     pub lighting: LightEngine,
     pub fluids: FluidEngine,
+    pub weather: WeatherManager,
 }
 
 impl Default for World {
@@ -29,7 +32,13 @@ impl World {
             sections: HashMap::new(),
             lighting: LightEngine::new(),
             fluids: FluidEngine::new(),
+            weather: WeatherManager::new(),
         }
+    }
+
+    /// Advances weather simulation by 1 game tick
+    pub fn tick_weather(&mut self) {
+        self.weather.tick();
     }
 
     /// Ticks cellular automaton fluid simulation and returns affected section coordinates

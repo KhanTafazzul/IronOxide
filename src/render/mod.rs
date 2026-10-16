@@ -10,11 +10,13 @@ pub mod gui;
 pub mod mesher;
 pub mod models;
 pub mod uniforms;
+pub mod weather_renderer;
 
 pub use colormap::{climate_to_uv, get_default_colormaps, Biome, BiomeColormaps};
 pub use camera::{Camera, CameraMode};
 pub use culling::{Frustum, FrustumPlane};
 pub use dynamic_lights::{calculate_dynamic_light, DynamicLightPipeline, DynamicLightUniform};
+pub use weather_renderer::{WeatherRenderer, WeatherVertex, WeatherMesh, PrecipitationMeshes};
 
 #[allow(unused_imports)]
 pub use atlas::{BlockType, Direction, TextureAtlas, TextureRect};

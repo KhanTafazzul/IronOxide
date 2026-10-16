@@ -1,9 +1,14 @@
 // REA Verified: net.minecraft.world.level.chunk.storage.RegionFileStorage (mapped: dmk.class)
 // World Persistence & Asynchronous Region File Storage (.mca) Manager
 
+pub mod level_data;
 pub mod nbt;
 pub mod region;
 
+pub use level_data::{
+    inventory_to_saved_items, load_saved_items_into_inventory, LevelData, PlayerData,
+    SavedItemStack,
+};
 pub use nbt::{NbtCompound, NbtTag};
 pub use region::{
     deserialize_chunk_column, serialize_chunk_column, RegionFile, SECTOR_BYTES,
@@ -218,6 +223,28 @@ impl WorldStorageManager {
             return region.has_chunk(cx, cz);
         }
         false
+    }
+
+    /// Path to saves/{world_name}/level.dat
+    pub fn level_dat_path(&self) -> PathBuf {
+        PathBuf::from("saves").join(&self.world_name).join("level.dat")
+    }
+
+    /// Loads gzip-compressed level.dat if present
+    pub fn load_level_data(&self) -> io::Result<Option<level_data::LevelData>> {
+        let path = self.level_dat_path();
+        if path.exists() {
+            let data = level_data::LevelData::load_from_file(&path)?;
+            Ok(Some(data))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Saves gzip-compressed level.dat to disk
+    pub fn save_level_data(&self, data: &level_data::LevelData) -> io::Result<()> {
+        let path = self.level_dat_path();
+        data.save_to_file(path)
     }
 }
 

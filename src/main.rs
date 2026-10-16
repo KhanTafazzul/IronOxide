@@ -26,12 +26,13 @@ use render::gui::inventory::InventoryGui;
 use render::gui::{DebugMetrics, DebugOverlay};
 use render::mesher::{greedy_mesh_section, ChunkMesh};
 use render::{Camera, RenderContext};
-use storage::WorldStorageManager;
+use storage::{load_saved_items_into_inventory, LevelData, WorldStorageManager};
 
 struct GameApp<'a> {
     render_ctx: Option<RenderContext<'a>>,
     camera: Camera,
     player: PlayerPhysics,
+    level_data: LevelData,
     world: World,
     storage: WorldStorageManager,
     last_save_time: Instant,
@@ -113,9 +114,48 @@ impl<'a> GameApp<'a> {
             meshes.insert(sec_pos, mesh);
         }
 
-        let spawn_pos = glam::Vec3::new(8.0, 1.0, 5.0);
-        let player = PlayerPhysics::new(spawn_pos);
-        let camera = Camera::new(player.eye_position(), 0.0, 0.0, 70.0);
+        // Load level.dat or initialize default world metadata
+        let level_data = match storage.load_level_data() {
+            Ok(Some(data)) => {
+                println!(
+                    "[LevelData] Loaded world '{}' (GameType: {}, DayTime: {}, PlayerPos: {:?})",
+                    data.level_name, data.game_type, data.day_time, data.player.pos
+                );
+                data
+            }
+            Ok(None) => {
+                println!("[LevelData] No level.dat found; initializing new world metadata for 'WorldName'");
+                let data = LevelData::new("WorldName");
+                if let Err(e) = storage.save_level_data(&data) {
+                    eprintln!("[LevelData] Failed to write initial level.dat: {e}");
+                }
+                data
+            }
+            Err(e) => {
+                eprintln!("[LevelData] Warning: failed to parse level.dat: {e}; using defaults");
+                LevelData::new("WorldName")
+            }
+        };
+
+        let player_pos = glam::Vec3::new(
+            level_data.player.pos[0] as f32,
+            level_data.player.pos[1] as f32,
+            level_data.player.pos[2] as f32,
+        );
+        let mut player = PlayerPhysics::new(player_pos);
+        player.velocity = glam::Vec3::new(
+            level_data.player.motion[0] as f32,
+            level_data.player.motion[1] as f32,
+            level_data.player.motion[2] as f32,
+        );
+
+        let mut camera = Camera::new(
+            player.eye_position(),
+            level_data.player.rotation[0],
+            level_data.player.rotation[1],
+            70.0,
+        );
+        camera.setup(player.position, Some(&world));
 
         let hotbar_slots = [
             BlockType::Torch,
@@ -132,17 +172,21 @@ impl<'a> GameApp<'a> {
         let selected_block = hotbar_slots[active_slot];
 
         let mut inventory = PlayerInventory::new();
-        // Sync default hotbar item stacks
-        for (i, &block) in hotbar_slots.iter().enumerate() {
-            if let Some(stack) = ItemStack::from_block(block, 64) {
-                inventory.hotbar[i] = Some(stack);
+        if !level_data.player.inventory.is_empty() {
+            load_saved_items_into_inventory(&level_data.player.inventory, &mut inventory);
+        } else {
+            // Sync default hotbar item stacks
+            for (i, &block) in hotbar_slots.iter().enumerate() {
+                if let Some(stack) = ItemStack::from_block(block, 64) {
+                    inventory.hotbar[i] = Some(stack);
+                }
             }
         }
         let inventory_gui = InventoryGui::new();
         let mining_tracker = BlockMiningTracker::new();
         let audio = AudioSystem::new();
         let footstep_tracker = FootstepTracker::new();
-        let last_player_pos = spawn_pos;
+        let last_player_pos = player_pos;
         let last_hit_sound_time = Instant::now();
 
         let mut mobs = MobEcs::new();
@@ -152,6 +196,7 @@ impl<'a> GameApp<'a> {
             render_ctx: None,
             camera,
             player,
+            level_data,
             world,
             storage,
             last_save_time: Instant::now(),
@@ -368,6 +413,10 @@ impl<'a> ApplicationHandler for GameApp<'a> {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
+                self.level_data.update_from_state(&self.player, &self.camera, &self.inventory);
+                if let Err(e) = self.storage.save_level_data(&self.level_data) {
+                    eprintln!("[Storage] Failed to save level.dat: {e}");
+                }
                 self.storage.flush_all(&self.world);
                 event_loop.exit();
             }
@@ -609,6 +658,8 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                 // Asynchronously flush modified chunks every 2 seconds to prevent game freezes
                 if now.duration_since(self.last_save_time) >= std::time::Duration::from_secs(2) {
                     self.last_save_time = now;
+                    self.level_data.update_from_state(&self.player, &self.camera, &self.inventory);
+                    let _ = self.storage.save_level_data(&self.level_data);
                     self.storage.flush_dirty(&self.world);
                 }
 

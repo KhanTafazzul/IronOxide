@@ -34,6 +34,8 @@ pub const ITEM_TORCH: u16 = 17;
 pub const ITEM_LAVA: u16 = 18;
 pub const ITEM_WATER: u16 = 19;
 pub const ITEM_OBSIDIAN: u16 = 20;
+pub const ITEM_LANTERN: u16 = 21;
+pub const ITEM_GLOWSTONE: u16 = 22;
 
 // REA Slot Constants from cjc.class
 pub const RESULT_SLOT: usize = 0;
@@ -108,6 +110,8 @@ impl ItemStack {
             ITEM_LAVA => "Lava",
             ITEM_WATER => "Water",
             ITEM_OBSIDIAN => "Obsidian",
+            ITEM_LANTERN => "Lantern",
+            ITEM_GLOWSTONE => "Glowstone",
             ITEM_CRAFTING_TABLE => "Crafting Table",
             ITEM_STICK => "Stick",
             _ => "Unknown Item",

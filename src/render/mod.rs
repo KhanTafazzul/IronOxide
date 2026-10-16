@@ -1,12 +1,15 @@
 pub mod atlas;
 pub mod camera;
 pub mod context;
+pub mod dynamic_lights;
 pub mod effects;
 pub mod entity_renderer;
 pub mod gui;
 pub mod mesher;
 pub mod models;
 pub mod uniforms;
+
+pub use dynamic_lights::{calculate_dynamic_light, DynamicLightPipeline, DynamicLightUniform};
 
 #[allow(unused_imports)]
 pub use atlas::{BlockType, Direction, TextureAtlas, TextureRect};

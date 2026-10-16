@@ -29,6 +29,7 @@ pub struct RenderContext<'w> {
     pub effects_renderer: EffectsRenderer,
     pub entity_renderer: crate::render::entity_renderer::EntityRenderer,
     pub mob_renderer: crate::render::models::MobRenderer,
+    pub terrain_renderer: crate::render::dynamic_lights::DynamicLightPipeline,
     pub adapter_info: wgpu::AdapterInfo,
 }
 
@@ -129,6 +130,14 @@ impl<'w> RenderContext<'w> {
             &atlas_bind_group_layout,
         );
 
+        // REA Verified: 3D Terrain & Dynamic Light Pipeline setup
+        let terrain_renderer = crate::render::dynamic_lights::DynamicLightPipeline::new(
+            &device,
+            config.format,
+            &camera_bind_group_layout,
+            &atlas_bind_group_layout,
+        );
+
         Ok(Self {
             window,
             surface,
@@ -151,6 +160,7 @@ impl<'w> RenderContext<'w> {
             effects_renderer,
             entity_renderer,
             mob_renderer,
+            terrain_renderer,
             adapter_info,
         })
     }
@@ -185,6 +195,8 @@ impl<'w> RenderContext<'w> {
         entities: &[crate::game::entities::ItemEntity],
         mobs: &[crate::game::mobs::MobEntity],
         debug_overlay: Option<(&crate::render::gui::DebugOverlay, &crate::render::gui::DebugMetrics)>,
+        meshes: &[&crate::render::mesher::ChunkMesh],
+        dynamic_light: crate::render::dynamic_lights::DynamicLightUniform,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let output = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(tex) | wgpu::CurrentSurfaceTexture::Suboptimal(tex) => tex,
@@ -233,6 +245,17 @@ impl<'w> RenderContext<'w> {
                 multiview_mask: None,
             });
         }
+
+        // 3D Terrain pass with dynamic lighting
+        self.terrain_renderer.update_uniform(&self.queue, dynamic_light);
+        self.terrain_renderer.render(
+            &mut encoder,
+            &self.queue,
+            &view,
+            &self.camera_bind_group,
+            &self.atlas_bind_group,
+            meshes.iter().copied(),
+        );
 
         // 3D Effects pass: Destroy crack overlay & Particle billboards
         self.effects_renderer.render(

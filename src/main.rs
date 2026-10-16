@@ -688,6 +688,11 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                         None
                     };
 
+                    let main_hand = self.inventory.hotbar[self.active_slot];
+                    let off_hand = self.inventory.offhand;
+                    let dynamic_light = render::calculate_dynamic_light(main_hand, off_hand, self.camera.eye);
+                    let active_meshes: Vec<&ChunkMesh> = self.meshes.values().collect();
+
                     if let Err(e) = ctx.render(
                         self.active_slot,
                         Some((&self.inventory_gui, &self.inventory)),
@@ -698,6 +703,8 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                         self.item_entities.active_items(),
                         self.mobs.mobs(),
                         debug_metrics.as_ref().map(|m| (&self.debug_overlay, m)),
+                        &active_meshes,
+                        dynamic_light,
                     ) {
                         eprintln!("Render error: {e:?}");
                     }

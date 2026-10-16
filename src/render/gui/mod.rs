@@ -16,6 +16,10 @@ use bytemuck::{Pod, Zeroable};
 use image::{Rgba, RgbaImage};
 use wgpu::util::DeviceExt;
 
+pub mod inventory;
+pub use inventory::InventoryGui;
+
+use crate::game::inventory::PlayerInventory;
 use crate::render::atlas::TextureAtlas;
 
 /// 2D GUI Vertex with pixel position (0..width, 0..height), UV, and RGBA tint
@@ -74,7 +78,7 @@ pub struct GuiRect {
     pub v_max: f32,
 }
 
-/// Stitched GUI texture atlas holding vanilla HUD textures
+/// Stitched GUI texture atlas holding vanilla HUD and Inventory textures
 pub struct GuiAtlas {
     pub width: u32,
     pub height: u32,
@@ -82,21 +86,24 @@ pub struct GuiAtlas {
     pub hotbar_uv: GuiRect,
     pub selection_uv: GuiRect,
     pub crosshair_uv: GuiRect,
+    pub inventory_uv: GuiRect,
+    pub white_uv: GuiRect,
 }
 
 impl GuiAtlas {
-    pub const ATLAS_SIZE: u32 = 256;
+    pub const ATLAS_SIZE: u32 = 512;
 
     /// Locate `client.jar` in standard paths
     pub fn find_client_jar() -> Option<PathBuf> {
         TextureAtlas::find_client_jar()
     }
 
-    /// Load HUD textures from `client.jar` (or fallback procedurally)
+    /// Load HUD and Inventory textures from `client.jar` (or fallback procedurally)
     pub fn load_or_create(jar_path: Option<&Path>) -> Self {
         let mut hotbar_img: Option<RgbaImage> = None;
         let mut sel_img: Option<RgbaImage> = None;
         let mut cross_img: Option<RgbaImage> = None;
+        let mut inv_img: Option<RgbaImage> = None;
 
         let resolved_path = jar_path
             .map(|p| p.to_path_buf())
@@ -126,6 +133,23 @@ impl GuiAtlas {
                         if entry.read_to_end(&mut buf).is_ok() {
                             if let Ok(img) = image::load_from_memory(&buf) {
                                 cross_img = Some(img.to_rgba8());
+                            }
+                        }
+                    }
+                    if let Ok(mut entry) = archive.by_name("assets/minecraft/textures/gui/container/inventory.png") {
+                        let mut buf = Vec::new();
+                        if entry.read_to_end(&mut buf).is_ok() {
+                            if let Ok(img) = image::load_from_memory(&buf) {
+                                let full = img.to_rgba8();
+                                let mut cropped = RgbaImage::new(176, 166);
+                                for y in 0..166 {
+                                    for x in 0..176 {
+                                        if x < full.width() && y < full.height() {
+                                            cropped.put_pixel(x, y, *full.get_pixel(x, y));
+                                        }
+                                    }
+                                }
+                                inv_img = Some(cropped);
                             }
                         }
                     }
@@ -180,10 +204,27 @@ impl GuiAtlas {
             img
         });
 
-        // Stitch into 256x256 atlas:
+        let inventory_bg = inv_img.unwrap_or_else(|| {
+            let mut img = RgbaImage::new(176, 166);
+            for y in 0..166 {
+                for x in 0..176 {
+                    let border = x == 0 || x == 175 || y == 0 || y == 165;
+                    if border {
+                        img.put_pixel(x, y, Rgba([55, 55, 55, 255]));
+                    } else {
+                        img.put_pixel(x, y, Rgba([198, 198, 198, 255]));
+                    }
+                }
+            }
+            img
+        });
+
+        // Stitch into 512x512 atlas:
         // Hotbar at (0, 0) -> 182 x 22
         // Selection at (0, 30) -> 24 x 24
         // Crosshair at (30, 30) -> 15 x 15
+        // White solid at (60, 30) -> 16 x 16
+        // Inventory container at (0, 60) -> 176 x 166
         let size = Self::ATLAS_SIZE;
         let mut atlas_image = RgbaImage::new(size, size);
 
@@ -229,6 +270,35 @@ impl GuiAtlas {
             v_max: (cross_y_off + crosshair.height()) as f32 / size as f32,
         };
 
+        // Paste white 16x16 square for solid quads
+        let white_x_off = 60;
+        let white_y_off = 30;
+        for y in 0..16 {
+            for x in 0..16 {
+                atlas_image.put_pixel(white_x_off + x, white_y_off + y, Rgba([255, 255, 255, 255]));
+            }
+        }
+        let white_uv = GuiRect {
+            u_min: white_x_off as f32 / size as f32,
+            v_min: white_y_off as f32 / size as f32,
+            u_max: (white_x_off + 16) as f32 / size as f32,
+            v_max: (white_y_off + 16) as f32 / size as f32,
+        };
+
+        // Paste inventory container (176x166) at (0, 60)
+        let inv_y_off = 60;
+        for y in 0..inventory_bg.height().min(size - inv_y_off) {
+            for x in 0..inventory_bg.width().min(size) {
+                atlas_image.put_pixel(x, inv_y_off + y, *inventory_bg.get_pixel(x, y));
+            }
+        }
+        let inventory_uv = GuiRect {
+            u_min: 0.0,
+            v_min: inv_y_off as f32 / size as f32,
+            u_max: inventory_bg.width() as f32 / size as f32,
+            v_max: (inv_y_off + inventory_bg.height()) as f32 / size as f32,
+        };
+
         Self {
             width: size,
             height: size,
@@ -236,6 +306,8 @@ impl GuiAtlas {
             hotbar_uv,
             selection_uv,
             crosshair_uv,
+            inventory_uv,
+            white_uv,
         }
     }
 }
@@ -253,8 +325,8 @@ pub struct GuiRenderer {
 }
 
 impl GuiRenderer {
-    const MAX_VERTICES: usize = 64;
-    const MAX_INDICES: usize = 96;
+    const MAX_VERTICES: usize = 2048;
+    const MAX_INDICES: usize = 3072;
 
     pub fn new(
         device: &wgpu::Device,
@@ -534,7 +606,7 @@ impl GuiRenderer {
         ]);
     }
 
-    /// Render HUD overlay on top of 3D frame (executes after 3D terrain pass with LoadOp::Load)
+    /// Render HUD and/or Inventory overlay on top of 3D frame (executes with LoadOp::Load)
     pub fn render(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
@@ -543,6 +615,7 @@ impl GuiRenderer {
         screen_width: u32,
         screen_height: u32,
         active_slot: usize,
+        inventory_gui: Option<(&InventoryGui, &PlayerInventory)>,
     ) {
         if screen_width == 0 || screen_height == 0 {
             return;
@@ -561,67 +634,83 @@ impl GuiRenderer {
             }]),
         );
 
-        // GUI integer scale (scale 2.0x for modern resolutions)
-        let scale = if sh >= 720.0 { 2.0 } else { 1.0 };
-
-        // 1. Hotbar Quad (Vanilla: 182x22, centered at bottom)
-        let hotbar_w = 182.0 * scale;
-        let hotbar_h = 22.0 * scale;
-        let hotbar_x = ((sw - hotbar_w) / 2.0).round();
-        let hotbar_y = sh - hotbar_h - (2.0 * scale);
-
-        // 2. Selection Quad (Vanilla: 24x24, offset by active_slot * 20)
-        let slot = active_slot.min(8) as f32;
-        let sel_w = 24.0 * scale;
-        let sel_h = 24.0 * scale;
-        let sel_x = hotbar_x - (1.0 * scale) + (slot * 20.0 * scale);
-        let sel_y = hotbar_y - (1.0 * scale);
-
-        // Normal elements batch (Hotbar + Selection Box)
-        let mut normal_vertices = Vec::with_capacity(8);
-        let mut normal_indices = Vec::with_capacity(12);
-
-        Self::add_quad(
-            &mut normal_vertices,
-            &mut normal_indices,
-            hotbar_x,
-            hotbar_y,
-            hotbar_w,
-            hotbar_h,
-            self.atlas.hotbar_uv,
-            [1.0, 1.0, 1.0, 1.0],
-        );
-
-        Self::add_quad(
-            &mut normal_vertices,
-            &mut normal_indices,
-            sel_x,
-            sel_y,
-            sel_w,
-            sel_h,
-            self.atlas.selection_uv,
-            [1.0, 1.0, 1.0, 1.0],
-        );
-
-        // 3. Crosshair Quad (Vanilla: 15x15, exact screen center)
-        let cross_w = 15.0 * scale;
-        let cross_h = 15.0 * scale;
-        let cross_x = ((sw - cross_w) / 2.0).round();
-        let cross_y = ((sh - cross_h) / 2.0).round();
-
+        let mut normal_vertices = Vec::with_capacity(256);
+        let mut normal_indices = Vec::with_capacity(384);
         let mut cross_vertices = Vec::with_capacity(4);
         let mut cross_indices = Vec::with_capacity(6);
 
-        Self::add_quad(
-            &mut cross_vertices,
-            &mut cross_indices,
-            cross_x,
-            cross_y,
-            cross_w,
-            cross_h,
-            self.atlas.crosshair_uv,
-            [1.0, 1.0, 1.0, 1.0],
-        );
+        let is_inventory_open = inventory_gui
+            .as_ref()
+            .map(|(inv, _)| inv.is_open)
+            .unwrap_or(false);
+
+        if is_inventory_open {
+            if let Some((inv_gui, inv_data)) = inventory_gui {
+                inv_gui.build_render_mesh(
+                    inv_data,
+                    &self.atlas,
+                    sw,
+                    sh,
+                    &mut normal_vertices,
+                    &mut normal_indices,
+                );
+            }
+        } else {
+            // GUI integer scale (scale 2.0x for modern resolutions)
+            let scale = if sh >= 720.0 { 2.0 } else { 1.0 };
+
+            // 1. Hotbar Quad (Vanilla: 182x22, centered at bottom)
+            let hotbar_w = 182.0 * scale;
+            let hotbar_h = 22.0 * scale;
+            let hotbar_x = ((sw - hotbar_w) / 2.0).round();
+            let hotbar_y = sh - hotbar_h - (2.0 * scale);
+
+            // 2. Selection Quad (Vanilla: 24x24, offset by active_slot * 20)
+            let slot = active_slot.min(8) as f32;
+            let sel_w = 24.0 * scale;
+            let sel_h = 24.0 * scale;
+            let sel_x = hotbar_x - (1.0 * scale) + (slot * 20.0 * scale);
+            let sel_y = hotbar_y - (1.0 * scale);
+
+            Self::add_quad(
+                &mut normal_vertices,
+                &mut normal_indices,
+                hotbar_x,
+                hotbar_y,
+                hotbar_w,
+                hotbar_h,
+                self.atlas.hotbar_uv,
+                [1.0, 1.0, 1.0, 1.0],
+            );
+
+            Self::add_quad(
+                &mut normal_vertices,
+                &mut normal_indices,
+                sel_x,
+                sel_y,
+                sel_w,
+                sel_h,
+                self.atlas.selection_uv,
+                [1.0, 1.0, 1.0, 1.0],
+            );
+
+            // 3. Crosshair Quad (Vanilla: 15x15, exact screen center)
+            let cross_w = 15.0 * scale;
+            let cross_h = 15.0 * scale;
+            let cross_x = ((sw - cross_w) / 2.0).round();
+            let cross_y = ((sh - cross_h) / 2.0).round();
+
+            Self::add_quad(
+                &mut cross_vertices,
+                &mut cross_indices,
+                cross_x,
+                cross_y,
+                cross_w,
+                cross_h,
+                self.atlas.crosshair_uv,
+                [1.0, 1.0, 1.0, 1.0],
+            );
+        }
 
         // Upload combined vertices
         let normal_idx_count = normal_indices.len() as u32;
@@ -634,6 +723,10 @@ impl GuiRenderer {
         let mut all_indices = normal_indices;
         for idx in cross_indices {
             all_indices.push(base_cross_idx + idx);
+        }
+
+        if all_indices.is_empty() {
+            return;
         }
 
         queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&all_vertices));
@@ -662,13 +755,17 @@ impl GuiRenderer {
         rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         rpass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
 
-        // Draw hotbar & selection box
-        rpass.set_pipeline(&self.normal_pipeline);
-        rpass.draw_indexed(0..normal_idx_count, 0, 0..1);
+        // Draw normal alpha-blended elements (HUD or Inventory)
+        if normal_idx_count > 0 {
+            rpass.set_pipeline(&self.normal_pipeline);
+            rpass.draw_indexed(0..normal_idx_count, 0, 0..1);
+        }
 
-        // Draw inverted crosshair
-        rpass.set_pipeline(&self.crosshair_pipeline);
-        rpass.draw_indexed(normal_idx_count..(normal_idx_count + cross_idx_count), 0, 0..1);
+        // Draw inverted crosshair if active
+        if cross_idx_count > 0 {
+            rpass.set_pipeline(&self.crosshair_pipeline);
+            rpass.draw_indexed(normal_idx_count..(normal_idx_count + cross_idx_count), 0, 0..1);
+        }
     }
 }
 
@@ -731,8 +828,8 @@ mod tests {
     #[test]
     fn test_gui_atlas_stitching() {
         let atlas = GuiAtlas::load_or_create(None);
-        assert_eq!(atlas.width, 256);
-        assert_eq!(atlas.height, 256);
+        assert_eq!(atlas.width, 512);
+        assert_eq!(atlas.height, 512);
 
         assert!(atlas.hotbar_uv.u_max > atlas.hotbar_uv.u_min);
         assert!(atlas.hotbar_uv.v_max > atlas.hotbar_uv.v_min);
@@ -742,6 +839,12 @@ mod tests {
 
         assert!(atlas.crosshair_uv.u_max > atlas.crosshair_uv.u_min);
         assert!(atlas.crosshair_uv.v_max > atlas.crosshair_uv.v_min);
+
+        assert!(atlas.inventory_uv.u_max > atlas.inventory_uv.u_min);
+        assert!(atlas.inventory_uv.v_max > atlas.inventory_uv.v_min);
+
+        assert!(atlas.white_uv.u_max > atlas.white_uv.u_min);
+        assert!(atlas.white_uv.v_max > atlas.white_uv.v_min);
     }
 
     #[test]

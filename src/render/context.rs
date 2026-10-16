@@ -140,7 +140,11 @@ impl<'w> RenderContext<'w> {
         );
     }
 
-    pub fn render(&mut self, active_slot: usize) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn render(
+        &mut self,
+        active_slot: usize,
+        inventory_gui: Option<(&crate::render::gui::InventoryGui, &crate::game::inventory::PlayerInventory)>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let output = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(tex) | wgpu::CurrentSurfaceTexture::Suboptimal(tex) => tex,
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => return Ok(()),
@@ -189,7 +193,7 @@ impl<'w> RenderContext<'w> {
             });
         }
 
-        // 2D HUD, Crosshair & Hotbar pass (executes after 3D pass with LoadOp::Load without clearing color attachment)
+        // 2D HUD and/or Inventory pass (executes after 3D pass with LoadOp::Load without clearing color attachment)
         self.gui_renderer.render(
             &mut encoder,
             &self.queue,
@@ -197,6 +201,7 @@ impl<'w> RenderContext<'w> {
             self.config.width,
             self.config.height,
             active_slot,
+            inventory_gui,
         );
 
         self.queue.submit(std::iter::once(encoder.finish()));

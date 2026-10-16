@@ -11,8 +11,10 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
 
+use game::inventory::{ItemStack, PlayerInventory};
 use game::{raycast_voxel, Aabb, PlayerInput, PlayerPhysics, World, DEFAULT_MAX_REACH};
 use render::atlas::{BlockType, TextureAtlas};
+use render::gui::inventory::InventoryGui;
 use render::mesher::{greedy_mesh_section, ChunkMesh};
 use render::{Camera, RenderContext};
 
@@ -26,6 +28,8 @@ struct GameApp<'a> {
     selected_block: BlockType,
     active_slot: usize,
     hotbar_slots: [BlockType; 9],
+    inventory: PlayerInventory,
+    inventory_gui: InventoryGui,
     mouse_captured: bool,
     // Movement key states
     key_w: bool,
@@ -63,18 +67,27 @@ impl<'a> GameApp<'a> {
         let camera = Camera::new(player.eye_position(), 0.0, 0.0, 70.0);
 
         let hotbar_slots = [
-            BlockType::Stone,
-            BlockType::Dirt,
-            BlockType::GrassBlock,
+            BlockType::OakLog,
             BlockType::Cobblestone,
+            BlockType::Dirt,
+            BlockType::Stone,
             BlockType::Deepslate,
             BlockType::OakPlanks,
-            BlockType::OakLog,
+            BlockType::OakLeaves,
             BlockType::Glass,
             BlockType::Bricks,
         ];
         let active_slot = 0;
         let selected_block = hotbar_slots[active_slot];
+
+        let mut inventory = PlayerInventory::new();
+        // Sync default hotbar item stacks
+        for (i, &block) in hotbar_slots.iter().enumerate() {
+            if let Some(stack) = ItemStack::from_block(block, 64) {
+                inventory.hotbar[i] = Some(stack);
+            }
+        }
+        let inventory_gui = InventoryGui::new();
 
         Self {
             render_ctx: None,
@@ -86,6 +99,8 @@ impl<'a> GameApp<'a> {
             selected_block,
             active_slot,
             hotbar_slots,
+            inventory,
+            inventory_gui,
             mouse_captured: false,
             key_w: false,
             key_s: false,
@@ -100,16 +115,87 @@ impl<'a> GameApp<'a> {
     /// Set active hotbar slot (0 to 8) and update active block
     fn set_active_slot(&mut self, slot: usize) {
         self.active_slot = slot.min(8);
-        self.selected_block = self.hotbar_slots[self.active_slot];
+        if let Some(stack) = self.inventory.hotbar[self.active_slot] {
+            if let Some(block) = stack.to_block() {
+                self.selected_block = block;
+            }
+        } else {
+            self.selected_block = self.hotbar_slots[self.active_slot];
+        }
+
+        let item_name = self.inventory.hotbar[self.active_slot]
+            .map(|s| s.name())
+            .unwrap_or("Empty");
         println!(
-            "Active Hotbar Slot {}: {:?} (Block ID: {:?})",
+            "Active Hotbar Slot {}: {:?} (Item: {})",
             self.active_slot + 1,
             self.selected_block,
-            self.selected_block
+            item_name
         );
     }
 
+    /// Add an item stack to player inventory (hotbar first, then main storage)
+    fn add_item_to_inventory(&mut self, mut stack: ItemStack) {
+        if stack.is_empty() {
+            return;
+        }
+
+        // 1. Try to merge with existing stacks in hotbar
+        for slot in &mut self.inventory.hotbar {
+            if let Some(mut existing) = *slot {
+                if existing.can_stack_with(&stack) && existing.count < existing.max_stack {
+                    let space = existing.max_stack - existing.count;
+                    let to_add = stack.count.min(space);
+                    existing.count += to_add;
+                    stack.count -= to_add;
+                    *slot = Some(existing);
+                    if stack.count == 0 {
+                        return;
+                    }
+                }
+            }
+        }
+
+        // 2. Try to merge with existing stacks in main storage
+        for slot in &mut self.inventory.main {
+            if let Some(mut existing) = *slot {
+                if existing.can_stack_with(&stack) && existing.count < existing.max_stack {
+                    let space = existing.max_stack - existing.count;
+                    let to_add = stack.count.min(space);
+                    existing.count += to_add;
+                    stack.count -= to_add;
+                    *slot = Some(existing);
+                    if stack.count == 0 {
+                        return;
+                    }
+                }
+            }
+        }
+
+        // 3. Find first empty slot in hotbar
+        for slot in &mut self.inventory.hotbar {
+            if slot.is_none() {
+                *slot = Some(stack);
+                return;
+            }
+        }
+
+        // 4. Find first empty slot in main storage
+        for slot in &mut self.inventory.main {
+            if slot.is_none() {
+                *slot = Some(stack);
+                return;
+            }
+        }
+
+        println!("Inventory full! Dropped item: {:?}", stack);
+    }
+
     fn update_physics(&mut self, _dt: f32) {
+        if self.inventory_gui.is_open {
+            return;
+        }
+
         let forward = if self.key_w { 1.0 } else if self.key_s { -1.0 } else { 0.0 };
         let strafe = if self.key_a { 1.0 } else if self.key_d { -1.0 } else { 0.0 };
         let input = PlayerInput {
@@ -136,7 +222,7 @@ impl<'a> GameApp<'a> {
         }
     }
 
-    /// Left-Click: Destroy targeted block and trigger immediate re-meshing
+    /// Left-Click: Destroy targeted block, drop item into inventory, and trigger re-meshing
     fn break_targeted_block(&mut self) {
         if let Some(hit) = raycast_voxel(
             self.camera.eye,
@@ -144,9 +230,19 @@ impl<'a> GameApp<'a> {
             DEFAULT_MAX_REACH,
             &self.world,
         ) {
-            println!("Left Click: Destroying block at {:?} (face: {:?})", hit.block_pos, hit.face);
+            let broken_block = self.world.get_block(hit.block_pos);
+            println!("Left Click: Destroying {:?} at {:?}", broken_block, hit.block_pos);
             let affected = self.world.set_block_at(hit.block_pos, BlockType::Air);
             self.remesh_sections(&affected);
+
+            // Vanilla-style block drop
+            let drop = match broken_block {
+                BlockType::GrassBlock => ItemStack::new(game::inventory::ITEM_DIRT, 1),
+                BlockType::Stone => ItemStack::new(game::inventory::ITEM_COBBLESTONE, 1),
+                other => ItemStack::from_block(other, 1)
+                    .unwrap_or(ItemStack::new(game::inventory::ITEM_DIRT, 1)),
+            };
+            self.add_item_to_inventory(drop);
         }
     }
 
@@ -167,6 +263,18 @@ impl<'a> GameApp<'a> {
                 );
                 let affected = self.world.set_block_at(place_pos, self.selected_block);
                 self.remesh_sections(&affected);
+
+                // Consume placed block from hotbar slot
+                if let Some(mut stack) = self.inventory.hotbar[self.active_slot] {
+                    if stack.to_block() == Some(self.selected_block) {
+                        stack.count = stack.count.saturating_sub(1);
+                        if stack.count == 0 {
+                            self.inventory.hotbar[self.active_slot] = None;
+                        } else {
+                            self.inventory.hotbar[self.active_slot] = Some(stack);
+                        }
+                    }
+                }
             } else {
                 println!("Cannot place block inside player bounding box!");
             }
@@ -178,12 +286,6 @@ impl<'a> GameApp<'a> {
         for &sec_pos in sections {
             if let Some(section) = self.world.sections.get(&sec_pos) {
                 let mesh = greedy_mesh_section(section, &self.atlas, &self.world);
-                println!(
-                    "Section {:?} re-meshed: {} quads, {} vertices",
-                    sec_pos,
-                    mesh.quad_count(),
-                    mesh.vertex_count()
-                );
                 self.meshes.insert(sec_pos, mesh);
             }
         }
@@ -197,7 +299,7 @@ impl<'a> ApplicationHandler for GameApp<'a> {
         }
 
         let window_attrs = Window::default_attributes()
-            .with_title("Minecraft Rust Client - WGPU Native Graphics")
+            .with_title("IronOxide - Minecraft Rust Client (WGPU)")
             .with_inner_size(PhysicalSize::new(1280, 720));
 
         let window = Arc::new(event_loop.create_window(window_attrs).expect("Window creation failed"));
@@ -225,24 +327,43 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                     ctx.resize(physical_size);
                 }
             }
+            WindowEvent::CursorMoved { position, .. } => {
+                if let Some(ctx) = &self.render_ctx {
+                    self.inventory_gui.update_mouse(
+                        position.x as f32,
+                        position.y as f32,
+                        ctx.config.width as f32,
+                        ctx.config.height as f32,
+                    );
+                }
+            }
             WindowEvent::MouseWheel { delta, .. } => {
+                if self.inventory_gui.is_open {
+                    return;
+                }
                 let scroll = match delta {
                     winit::event::MouseScrollDelta::LineDelta(_x, y) => y,
                     winit::event::MouseScrollDelta::PixelDelta(pos) => (pos.y as f32).signum(),
                 };
                 if scroll > 0.0 {
-                    // Scroll up: cycle left ((slot + 8) % 9)
                     let prev_slot = (self.active_slot + 8) % 9;
                     self.set_active_slot(prev_slot);
                 } else if scroll < 0.0 {
-                    // Scroll down: cycle right ((slot + 1) % 9)
                     let next_slot = (self.active_slot + 1) % 9;
                     self.set_active_slot(next_slot);
                 }
             }
             WindowEvent::MouseInput { button, state, .. } => {
                 if state == ElementState::Pressed {
-                    if !self.mouse_captured {
+                    if self.inventory_gui.is_open {
+                        self.inventory_gui.handle_mouse_click(button, &mut self.inventory);
+                        // Update active block from current hotbar slot
+                        if let Some(stack) = self.inventory.hotbar[self.active_slot] {
+                            if let Some(block) = stack.to_block() {
+                                self.selected_block = block;
+                            }
+                        }
+                    } else if !self.mouse_captured {
                         if let Some(ctx) = &self.render_ctx {
                             let window = Arc::clone(&ctx.window);
                             self.toggle_mouse_grab(&window);
@@ -267,28 +388,53 @@ impl<'a> ApplicationHandler for GameApp<'a> {
             } => {
                 let pressed = state == ElementState::Pressed;
                 match key_code {
-                    KeyCode::KeyW => self.key_w = pressed,
-                    KeyCode::KeyS => self.key_s = pressed,
-                    KeyCode::KeyA => self.key_a = pressed,
-                    KeyCode::KeyD => self.key_d = pressed,
-                    KeyCode::Space => self.key_space = pressed,
-                    KeyCode::ShiftLeft | KeyCode::ShiftRight => self.key_shift = pressed,
-                    // Hotbar slot switching (1 to 9)
-                    KeyCode::Digit1 if pressed => self.set_active_slot(0),
-                    KeyCode::Digit2 if pressed => self.set_active_slot(1),
-                    KeyCode::Digit3 if pressed => self.set_active_slot(2),
-                    KeyCode::Digit4 if pressed => self.set_active_slot(3),
-                    KeyCode::Digit5 if pressed => self.set_active_slot(4),
-                    KeyCode::Digit6 if pressed => self.set_active_slot(5),
-                    KeyCode::Digit7 if pressed => self.set_active_slot(6),
-                    KeyCode::Digit8 if pressed => self.set_active_slot(7),
-                    KeyCode::Digit9 if pressed => self.set_active_slot(8),
+                    // Open/close inventory on 'E'
+                    KeyCode::KeyE if pressed => {
+                        if let Some(ctx) = &self.render_ctx {
+                            let window = Arc::clone(&ctx.window);
+                            self.inventory_gui.toggle(&window);
+                            self.mouse_captured = !self.inventory_gui.is_open;
+                            if !self.inventory_gui.is_open {
+                                if let Some(stack) = self.inventory.hotbar[self.active_slot] {
+                                    if let Some(block) = stack.to_block() {
+                                        self.selected_block = block;
+                                    }
+                                }
+                            }
+                        }
+                    }
                     KeyCode::Escape if pressed => {
                         if let Some(ctx) = &self.render_ctx {
                             let window = Arc::clone(&ctx.window);
-                            self.toggle_mouse_grab(&window);
+                            if self.inventory_gui.is_open {
+                                self.inventory_gui.close(&window);
+                                self.mouse_captured = true;
+                                if let Some(stack) = self.inventory.hotbar[self.active_slot] {
+                                    if let Some(block) = stack.to_block() {
+                                        self.selected_block = block;
+                                    }
+                                }
+                            } else {
+                                self.toggle_mouse_grab(&window);
+                            }
                         }
                     }
+                    KeyCode::KeyW => self.key_w = pressed && !self.inventory_gui.is_open,
+                    KeyCode::KeyS => self.key_s = pressed && !self.inventory_gui.is_open,
+                    KeyCode::KeyA => self.key_a = pressed && !self.inventory_gui.is_open,
+                    KeyCode::KeyD => self.key_d = pressed && !self.inventory_gui.is_open,
+                    KeyCode::Space => self.key_space = pressed && !self.inventory_gui.is_open,
+                    KeyCode::ShiftLeft | KeyCode::ShiftRight => self.key_shift = pressed && !self.inventory_gui.is_open,
+                    // Hotbar slot switching (1 to 9)
+                    KeyCode::Digit1 if pressed && !self.inventory_gui.is_open => self.set_active_slot(0),
+                    KeyCode::Digit2 if pressed && !self.inventory_gui.is_open => self.set_active_slot(1),
+                    KeyCode::Digit3 if pressed && !self.inventory_gui.is_open => self.set_active_slot(2),
+                    KeyCode::Digit4 if pressed && !self.inventory_gui.is_open => self.set_active_slot(3),
+                    KeyCode::Digit5 if pressed && !self.inventory_gui.is_open => self.set_active_slot(4),
+                    KeyCode::Digit6 if pressed && !self.inventory_gui.is_open => self.set_active_slot(5),
+                    KeyCode::Digit7 if pressed && !self.inventory_gui.is_open => self.set_active_slot(6),
+                    KeyCode::Digit8 if pressed && !self.inventory_gui.is_open => self.set_active_slot(7),
+                    KeyCode::Digit9 if pressed && !self.inventory_gui.is_open => self.set_active_slot(8),
                     _ => {}
                 }
             }
@@ -301,7 +447,10 @@ impl<'a> ApplicationHandler for GameApp<'a> {
 
                 if let Some(ctx) = &mut self.render_ctx {
                     ctx.update_camera(&self.camera);
-                    if let Err(e) = ctx.render(self.active_slot) {
+                    if let Err(e) = ctx.render(
+                        self.active_slot,
+                        Some((&self.inventory_gui, &self.inventory)),
+                    ) {
                         eprintln!("Render error: {e:?}");
                     }
                     ctx.window.request_redraw();
@@ -312,7 +461,7 @@ impl<'a> ApplicationHandler for GameApp<'a> {
     }
 
     fn device_event(&mut self, _event_loop: &ActiveEventLoop, _device_id: DeviceId, event: DeviceEvent) {
-        if !self.mouse_captured {
+        if !self.mouse_captured || self.inventory_gui.is_open {
             return;
         }
 

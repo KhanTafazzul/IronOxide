@@ -1132,6 +1132,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "iron_oxide"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "glam",
+ "image",
+ "pollster",
+ "rayon",
+ "rodio",
+ "wgpu",
+ "winit",
+ "zip",
+]
+
+[[package]]
 name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1363,21 +1378,6 @@ checksum = "8ea1f30cedd69f0a2954655f7188c6a834246d2bcf1e315e2ac40c4b24dc9519"
 dependencies = [
  "cfg-if",
  "rayon",
-]
-
-[[package]]
-name = "mc_rust_game"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "glam",
- "image",
- "pollster",
- "rayon",
- "rodio",
- "wgpu",
- "winit",
- "zip",
 ]
 
 [[package]]

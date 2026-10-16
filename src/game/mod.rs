@@ -1,7 +1,14 @@
+pub mod inventory;
 pub mod physics;
 pub mod raycast;
 pub mod world;
 
+#[allow(unused_imports)]
+pub use inventory::{
+    ItemStack, PlayerInventory, RecipeRegistry, CRAFT_SLOT_END, CRAFT_SLOT_START,
+    HOTBAR_SLOT_END, HOTBAR_SLOT_START, INV_SLOT_END, INV_SLOT_START, RESULT_SLOT,
+    SHIELD_SLOT, TOTAL_SLOTS,
+};
 #[allow(unused_imports)]
 pub use physics::{Aabb, PlayerInput, PlayerPhysics};
 #[allow(unused_imports)]

@@ -61,7 +61,7 @@ cargo run --release
 ## 🛠️ Architecture Overview
 
 ```
-mc_rust_game/
+IronOxide/
 ├── Cargo.toml
 ├── src/
 │   ├── main.rs            # Application event loop, input handling & interaction

@@ -1,3 +1,4 @@
+mod audio;
 mod game;
 mod render;
 
@@ -11,6 +12,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
 
+use audio::{AudioSystem, FootstepTracker, SoundEvent, SoundType};
 use game::inventory::{ItemStack, PlayerInventory};
 use game::{
     raycast_voxel, Aabb, BlockMiningTracker, MiningUpdateResult, PlayerInput, PlayerPhysics, World,
@@ -36,6 +38,10 @@ struct GameApp<'a> {
     mining_tracker: BlockMiningTracker,
     left_mouse_held: bool,
     mouse_captured: bool,
+    audio: AudioSystem,
+    footstep_tracker: FootstepTracker,
+    last_player_pos: glam::Vec3,
+    last_hit_sound_time: Instant,
     // Movement key states
     key_w: bool,
     key_s: bool,
@@ -94,6 +100,10 @@ impl<'a> GameApp<'a> {
         }
         let inventory_gui = InventoryGui::new();
         let mining_tracker = BlockMiningTracker::new();
+        let audio = AudioSystem::new();
+        let footstep_tracker = FootstepTracker::new();
+        let last_player_pos = spawn_pos;
+        let last_hit_sound_time = Instant::now();
 
         Self {
             render_ctx: None,
@@ -110,6 +120,10 @@ impl<'a> GameApp<'a> {
             mining_tracker,
             left_mouse_held: false,
             mouse_captured: false,
+            audio,
+            footstep_tracker,
+            last_player_pos,
+            last_hit_sound_time,
             key_w: false,
             key_s: false,
             key_a: false,
@@ -216,6 +230,33 @@ impl<'a> GameApp<'a> {
 
         self.player.tick(&input, &self.world);
         self.camera.eye = self.player.eye_position();
+
+        // 3D Footstep sound trigger based on walking displacement
+        let current_pos = self.player.position;
+        let dx = current_pos.x - self.last_player_pos.x;
+        let dz = current_pos.z - self.last_player_pos.z;
+        let horizontal_disp = (dx * dx + dz * dz).sqrt();
+        self.last_player_pos = current_pos;
+
+        if self.footstep_tracker.update(horizontal_disp, self.player.on_ground) {
+            let block_under_coord = glam::IVec3::new(
+                current_pos.x.floor() as i32,
+                (current_pos.y - 0.2).floor() as i32,
+                current_pos.z.floor() as i32,
+            );
+            let block_under = self.world.get_block(block_under_coord);
+            let sound_type = SoundType::for_block(block_under);
+            let pitch = self.audio.random_pitch(sound_type.pitch);
+            self.audio.play_spatial(
+                sound_type.step_sound,
+                current_pos,
+                self.camera.eye,
+                self.camera.forwards(),
+                self.camera.up(),
+                0.35 * sound_type.volume,
+                pitch,
+            );
+        }
     }
 
     fn toggle_mouse_grab(&mut self, window: &Window) {
@@ -360,6 +401,17 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                             match button {
                                 MouseButton::Left => {
                                     self.left_mouse_held = true;
+                                    // Punch sound on air miss
+                                    let hit = raycast_voxel(
+                                        self.camera.eye,
+                                        self.camera.forwards(),
+                                        DEFAULT_MAX_REACH,
+                                        &self.world,
+                                    );
+                                    if hit.is_none() {
+                                        let pitch = self.audio.random_pitch(1.0);
+                                        self.audio.play_local(SoundEvent::PlayerPunchAir, 0.45, pitch);
+                                    }
                                 }
                                 MouseButton::Right => self.place_targeted_block(),
                                 _ => {}
@@ -467,11 +519,40 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                 match mining_result {
                     MiningUpdateResult::Mining { pos, stage, .. } => {
                         active_mining_target = Some((pos, stage));
+                        // 3D Spatial block hit sound every 220ms during mining
+                        if now.duration_since(self.last_hit_sound_time) >= std::time::Duration::from_millis(220) {
+                            self.last_hit_sound_time = now;
+                            let target_block = self.world.get_block(pos);
+                            let sound_type = SoundType::for_block(target_block);
+                            let pitch = self.audio.random_pitch(sound_type.pitch);
+                            self.audio.play_spatial(
+                                sound_type.hit_sound,
+                                pos.as_vec3() + glam::Vec3::splat(0.5),
+                                self.camera.eye,
+                                self.camera.forwards(),
+                                self.camera.up(),
+                                0.5 * sound_type.volume,
+                                pitch,
+                            );
+                        }
                     }
                     MiningUpdateResult::Broken { pos, block, .. } => {
                         println!("Block broken: {:?} at {:?}", block, pos);
                         let affected = self.world.set_block_at(pos, BlockType::Air);
                         self.remesh_sections(&affected);
+
+                        // 3D Spatial block break sound
+                        let sound_type = SoundType::for_block(block);
+                        let pitch = self.audio.random_pitch(sound_type.pitch);
+                        self.audio.play_spatial(
+                            sound_type.break_sound,
+                            pos.as_vec3() + glam::Vec3::splat(0.5),
+                            self.camera.eye,
+                            self.camera.forwards(),
+                            self.camera.up(),
+                            0.85 * sound_type.volume,
+                            pitch,
+                        );
 
                         // Spawn 12-20 physics-affected voxel particles with random outward velocities
                         if let Some(ctx) = &mut self.render_ctx {

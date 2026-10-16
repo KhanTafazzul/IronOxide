@@ -81,6 +81,11 @@ impl BlockVertex {
 /// Abstract block reader for neighbor querying across chunk borders
 pub trait BlockReader: Send + Sync {
     fn get_block_at(&self, x: i32, y: i32, z: i32) -> BlockType;
+
+    /// Read combined voxel light level (0-15) for dynamic vertex shading (defaults to full bright 15)
+    fn get_light_at(&self, _x: i32, _y: i32, _z: i32) -> u8 {
+        15
+    }
 }
 
 /// 16x16x16 Chunk Section representing a single sub-chunk in Minecraft 1.20.4
@@ -224,12 +229,62 @@ pub fn calculate_vertex_ao(
     }
 }
 
+/// Smooth vertex light calculation based on net.minecraft.client.renderer.block.ModelBlockRenderer (ftx.class).
+/// Averages light levels across neighboring non-occluded voxels touching the vertex.
+#[inline]
+pub fn calculate_vertex_light(
+    reader: &dyn BlockReader,
+    block_pos: [i32; 3],
+    normal: [i32; 3],
+    offset_u: [i32; 3],
+    offset_v: [i32; 3],
+) -> u8 {
+    let center = [
+        block_pos[0] + normal[0],
+        block_pos[1] + normal[1],
+        block_pos[2] + normal[2],
+    ];
+    let s1 = [
+        center[0] + offset_u[0],
+        center[1] + offset_u[1],
+        center[2] + offset_u[2],
+    ];
+    let s2 = [
+        center[0] + offset_v[0],
+        center[1] + offset_v[1],
+        center[2] + offset_v[2],
+    ];
+    let c = [
+        center[0] + offset_u[0] + offset_v[0],
+        center[1] + offset_u[1] + offset_v[1],
+        center[2] + offset_u[2] + offset_v[2],
+    ];
+
+    let l_center = reader.get_light_at(center[0], center[1], center[2]);
+    let l_s1 = reader.get_light_at(s1[0], s1[1], s1[2]);
+    let l_s2 = reader.get_light_at(s2[0], s2[1], s2[2]);
+    let l_c = reader.get_light_at(c[0], c[1], c[2]);
+
+    let max_val = l_center.max(l_s1).max(l_s2).max(l_c);
+    let sum = l_center as u32 + l_s1 as u32 + l_s2 as u32 + l_c as u32;
+    ((sum / 4) as u8).max(max_val.saturating_sub(1)).min(15)
+}
+
+/// Dynamic vertex shading combining ambient occlusion (0 to 3) with voxel light level (0 to 15).
+/// Returns final vertex shade multiplier (0.0 to 3.0 scale).
+#[inline]
+pub fn compute_shaded_ao(ao: u8, light: u8) -> f32 {
+    let light_mult = 0.10 + 0.90 * (light.min(15) as f32 / 15.0);
+    (ao as f32) * light_mult
+}
+
 /// Internal cell representation on a 2D slice during greedy sweep
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct FaceInfo {
     block: BlockType,
     direction: Direction,
     ao: [u8; 4], // [AO_bottom_left, AO_bottom_right, AO_top_right, AO_top_left]
+    light: [u8; 4], // [Light_bottom_left, Light_bottom_right, Light_top_right, Light_top_left]
 }
 
 /// 3D Greedy Meshing Algorithm
@@ -314,10 +369,16 @@ pub fn greedy_mesh_section(
                         let ao2 = calculate_vertex_ao(reader, face_block_pos, normal, u_dir, v_dir);
                         let ao3 = calculate_vertex_ao(reader, face_block_pos, normal, neg_u, v_dir);
 
+                        let light0 = calculate_vertex_light(reader, face_block_pos, normal, neg_u, neg_v);
+                        let light1 = calculate_vertex_light(reader, face_block_pos, normal, u_dir, neg_v);
+                        let light2 = calculate_vertex_light(reader, face_block_pos, normal, u_dir, v_dir);
+                        let light3 = calculate_vertex_light(reader, face_block_pos, normal, neg_u, v_dir);
+
                         mask[mask_idx] = Some(FaceInfo {
                             block,
                             direction: dir,
                             ao: [ao0, ao1, ao2, ao3],
+                            light: [light0, light1, light2, light3],
                         });
                     }
                 }
@@ -416,10 +477,10 @@ pub fn greedy_mesh_section(
                         let u_max = uv_bounds[2];
                         let v_max = uv_bounds[3];
 
-                        let ao0 = current_face.ao[0] as f32;
-                        let ao1 = current_face.ao[1] as f32;
-                        let ao2 = current_face.ao[2] as f32;
-                        let ao3 = current_face.ao[3] as f32;
+                        let shade0 = compute_shaded_ao(current_face.ao[0], current_face.light[0]);
+                        let shade1 = compute_shaded_ao(current_face.ao[1], current_face.light[1]);
+                        let shade2 = compute_shaded_ao(current_face.ao[2], current_face.light[2]);
+                        let shade3 = compute_shaded_ao(current_face.ao[3], current_face.light[3]);
 
                         let base_vertex_idx = mesh.vertices.len() as u32;
 
@@ -430,19 +491,19 @@ pub fn greedy_mesh_section(
                         );
 
                         if !is_back_face {
-                            mesh.vertices.push(BlockVertex::new(wp0, normal_idx, [u_min, v_min], ao0));
-                            mesh.vertices.push(BlockVertex::new(wp1, normal_idx, [u_max, v_min], ao1));
-                            mesh.vertices.push(BlockVertex::new(wp2, normal_idx, [u_max, v_max], ao2));
-                            mesh.vertices.push(BlockVertex::new(wp3, normal_idx, [u_min, v_max], ao3));
+                            mesh.vertices.push(BlockVertex::new(wp0, normal_idx, [u_min, v_min], shade0));
+                            mesh.vertices.push(BlockVertex::new(wp1, normal_idx, [u_max, v_min], shade1));
+                            mesh.vertices.push(BlockVertex::new(wp2, normal_idx, [u_max, v_max], shade2));
+                            mesh.vertices.push(BlockVertex::new(wp3, normal_idx, [u_min, v_max], shade3));
                         } else {
-                            mesh.vertices.push(BlockVertex::new(wp0, normal_idx, [u_min, v_min], ao0));
-                            mesh.vertices.push(BlockVertex::new(wp3, normal_idx, [u_min, v_max], ao3));
-                            mesh.vertices.push(BlockVertex::new(wp2, normal_idx, [u_max, v_max], ao2));
-                            mesh.vertices.push(BlockVertex::new(wp1, normal_idx, [u_max, v_min], ao1));
+                            mesh.vertices.push(BlockVertex::new(wp0, normal_idx, [u_min, v_min], shade0));
+                            mesh.vertices.push(BlockVertex::new(wp3, normal_idx, [u_min, v_max], shade3));
+                            mesh.vertices.push(BlockVertex::new(wp2, normal_idx, [u_max, v_max], shade2));
+                            mesh.vertices.push(BlockVertex::new(wp1, normal_idx, [u_max, v_min], shade1));
                         }
 
-                        // Minecraft AO diagonal flip rule to prevent interpolation creases
-                        if (ao0 + ao2) > (ao1 + ao3) {
+                        // Minecraft AO/lighting diagonal flip rule to prevent interpolation creases
+                        if (shade0 + shade2) > (shade1 + shade3) {
                             mesh.indices.extend_from_slice(&[
                                 base_vertex_idx,
                                 base_vertex_idx + 1,
@@ -635,5 +696,54 @@ mod tests {
         let (pos, mesh) = &completed[0];
         assert_eq!(*pos, IVec3::new(1, 0, 1));
         assert_eq!(mesh.quad_count(), 6);
+    }
+
+    #[test]
+    fn test_lighting_shading_and_face_separation() {
+        struct LitReader {
+            blocks: std::collections::HashMap<IVec3, BlockType>,
+            lights: std::collections::HashMap<IVec3, u8>,
+        }
+        impl BlockReader for LitReader {
+            fn get_block_at(&self, x: i32, y: i32, z: i32) -> BlockType {
+                self.blocks.get(&IVec3::new(x, y, z)).copied().unwrap_or(BlockType::Air)
+            }
+            fn get_light_at(&self, x: i32, y: i32, z: i32) -> u8 {
+                self.lights.get(&IVec3::new(x, y, z)).copied().unwrap_or(15)
+            }
+        }
+
+        let mut section = ChunkSection::new(IVec3::ZERO);
+        section.set_block(0, 0, 0, BlockType::Stone);
+        section.set_block(1, 0, 0, BlockType::Stone);
+
+        let mut reader = LitReader {
+            blocks: std::collections::HashMap::new(),
+            lights: std::collections::HashMap::new(),
+        };
+        reader.blocks.insert(IVec3::new(0, 0, 0), BlockType::Stone);
+        reader.blocks.insert(IVec3::new(1, 0, 0), BlockType::Stone);
+
+        // Different light levels above the two blocks:
+        reader.lights.insert(IVec3::new(0, 1, 0), 15);
+        reader.lights.insert(IVec3::new(1, 1, 0), 5);
+
+        let atlas = TextureAtlas::load_or_create(None);
+        let mesh = greedy_mesh_section(&section, &atlas, &reader);
+
+        // Because light levels differ (15 vs 5), the top faces cannot be merged into 1 quad;
+        // they must remain separate to represent the lighting gradient!
+        let top_quads: Vec<_> = mesh
+            .vertices
+            .chunks_exact(4)
+            .filter(|quad| quad[0].normal_idx == direction_to_normal_idx(Direction::Up))
+            .collect();
+        assert_eq!(top_quads.len(), 2, "Faces with different light levels should not merge");
+
+        // The quad above block (0, 0, 0) has vertices with min x = 0.0
+        // The quad above block (1, 0, 0) has vertices with max x = 2.0
+        let quad_x0 = top_quads.iter().find(|q| q.iter().any(|v| v.x == 0.0)).unwrap();
+        let quad_x1 = top_quads.iter().find(|q| q.iter().any(|v| v.x == 2.0)).unwrap();
+        assert!(quad_x0[0].ao > quad_x1[0].ao, "Bright face should have higher shade value than dim face");
     }
 }

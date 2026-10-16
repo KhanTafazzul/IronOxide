@@ -52,18 +52,46 @@ pub enum BlockType {
     Sand,
     Glass,
     Bricks,
+    Torch,
+    Lava,
+    Water,
 }
 
 impl BlockType {
     pub fn is_opaque(&self) -> bool {
         match self {
-            BlockType::Air | BlockType::Glass | BlockType::OakLeaves => false,
+            BlockType::Air
+            | BlockType::Glass
+            | BlockType::OakLeaves
+            | BlockType::Water
+            | BlockType::Torch => false,
             _ => true,
         }
     }
 
     pub fn is_air(&self) -> bool {
         matches!(self, BlockType::Air)
+    }
+
+    /// Point light source emission level: Torch = 14, Lava = 15
+    pub fn light_emission(&self) -> u8 {
+        match self {
+            BlockType::Lava => 15,
+            BlockType::Torch => 14,
+            _ => 0,
+        }
+    }
+
+    /// Whether light can pass through this block: Air, Glass, Water, Leaves, Torch
+    pub fn is_transparent_for_light(&self) -> bool {
+        match self {
+            BlockType::Air
+            | BlockType::Glass
+            | BlockType::Water
+            | BlockType::Torch
+            | BlockType::OakLeaves => true,
+            _ => false,
+        }
     }
 }
 
@@ -186,7 +214,7 @@ impl TextureAtlas {
 
     /// Provides fallback 16x16 textures if texture is missing or jar cannot be opened
     fn ensure_fallbacks(sprites: &mut HashMap<String, RgbaImage>) {
-        let palette: [(&str, [u8; 4]); 16] = [
+        let palette: [(&str, [u8; 4]); 19] = [
             ("grass_block_top", [86, 175, 49, 255]),
             ("grass_block_side", [106, 140, 60, 255]),
             ("dirt", [134, 96, 67, 255]),
@@ -202,6 +230,9 @@ impl TextureAtlas {
             ("sand", [219, 207, 154, 255]),
             ("glass", [200, 220, 255, 120]),
             ("bricks", [150, 67, 50, 255]),
+            ("torch", [255, 210, 40, 255]),
+            ("lava", [240, 110, 20, 255]),
+            ("water", [40, 80, 220, 180]),
             ("missing", [255, 0, 255, 255]),
         ];
 
@@ -346,6 +377,9 @@ impl TextureAtlas {
             BlockType::Sand => "sand",
             BlockType::Glass => "glass",
             BlockType::Bricks => "bricks",
+            BlockType::Torch => "torch",
+            BlockType::Lava => "lava",
+            BlockType::Water => "water",
         };
 
         self.get_sprite(sprite_name).to_array()

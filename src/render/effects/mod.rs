@@ -155,6 +155,9 @@ impl ParticleSystem {
             BlockType::Glass => [0.85, 0.95, 1.0, 0.6],
             BlockType::Bricks => [0.65, 0.30, 0.25, 1.0],
             BlockType::Sand => [0.85, 0.80, 0.60, 1.0],
+            BlockType::Torch => [1.0, 0.85, 0.20, 1.0],
+            BlockType::Lava => [0.95, 0.45, 0.10, 1.0],
+            BlockType::Water => [0.20, 0.40, 0.85, 0.7],
             _ => [0.50, 0.50, 0.50, 1.0],
         };
 

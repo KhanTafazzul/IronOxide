@@ -6,11 +6,13 @@ use std::collections::HashMap;
 use glam::IVec3;
 use crate::render::atlas::BlockType;
 use crate::render::mesher::{BlockReader, ChunkSection, SECTION_SIZE};
+use crate::world::lighting::LightEngine;
 
-/// Multi-section voxel world implementing global BlockReader
+/// Multi-section voxel world implementing global BlockReader and LightEngine
 #[derive(Clone, Debug)]
 pub struct World {
     pub sections: HashMap<IVec3, ChunkSection>,
+    pub lighting: LightEngine,
 }
 
 impl Default for World {
@@ -23,6 +25,7 @@ impl World {
     pub fn new() -> Self {
         Self {
             sections: HashMap::new(),
+            lighting: LightEngine::new(),
         }
     }
 
@@ -38,8 +41,11 @@ impl World {
 
     /// Place or break block at world coordinate (x, y, z).
     /// Returns the list of affected section coordinates that must be re-meshed
-    /// (including adjacent neighbor sections if the block sits on a 16x16x16 boundary).
+    /// (including adjacent neighbor sections if the block sits on a 16x16x16 boundary,
+    /// or if lighting propagation affected neighbor sections).
     pub fn set_block_at(&mut self, world_pos: IVec3, block: BlockType) -> Vec<IVec3> {
+        let old_block = self.get_block(world_pos);
+
         let size = SECTION_SIZE as i32;
         let sec_x = world_pos.x.div_euclid(size);
         let sec_y = world_pos.y.div_euclid(size);
@@ -75,17 +81,28 @@ impl World {
             affected.push(IVec3::new(sec_x, sec_y, sec_z + 1));
         }
 
+        // Lighting BFS updates
+        let mut light_affected = if block.is_air() && !old_block.is_air() {
+            self.lighting.on_block_broken(world_pos, old_block, &self.sections)
+        } else if !block.is_air() {
+            self.lighting.on_block_placed(world_pos, block, &self.sections)
+        } else {
+            Vec::new()
+        };
+        affected.append(&mut light_affected);
+
+        affected.sort_by_key(|p| (p.x, p.y, p.z));
         affected.dedup();
         affected
     }
 }
 
-impl BlockReader for World {
+impl BlockReader for HashMap<IVec3, ChunkSection> {
     #[inline]
     fn get_block_at(&self, x: i32, y: i32, z: i32) -> BlockType {
         let size = SECTION_SIZE as i32;
         let sec_pos = IVec3::new(x.div_euclid(size), y.div_euclid(size), z.div_euclid(size));
-        if let Some(sec) = self.sections.get(&sec_pos) {
+        if let Some(sec) = self.get(&sec_pos) {
             sec.get_block(
                 x.rem_euclid(size) as usize,
                 y.rem_euclid(size) as usize,
@@ -94,6 +111,18 @@ impl BlockReader for World {
         } else {
             BlockType::Air
         }
+    }
+}
+
+impl BlockReader for World {
+    #[inline]
+    fn get_block_at(&self, x: i32, y: i32, z: i32) -> BlockType {
+        self.sections.get_block_at(x, y, z)
+    }
+
+    #[inline]
+    fn get_light_at(&self, x: i32, y: i32, z: i32) -> u8 {
+        self.lighting.get_combined_light(IVec3::new(x, y, z))
     }
 }
 

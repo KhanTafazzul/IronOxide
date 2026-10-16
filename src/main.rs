@@ -1,6 +1,7 @@
 mod audio;
 mod game;
 mod render;
+pub mod world;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -68,6 +69,15 @@ impl<'a> GameApp<'a> {
         // Stepping blocks to test interaction and step-up
         world.set_block_at(glam::IVec3::new(8, 1, 8), BlockType::Stone);
         world.set_block_at(glam::IVec3::new(8, 1, 9), BlockType::Cobblestone);
+        // Point light source: Torch emits light level 14
+        world.set_block_at(glam::IVec3::new(8, 2, 8), BlockType::Torch);
+
+        // Initialize daylight / skylight across the spawn platform
+        for x in 0..16 {
+            for z in 0..16 {
+                world.lighting.update_skylight_column(x, z, 15, 0, &world.sections);
+            }
+        }
 
         let mut meshes = HashMap::new();
         if let Some(sec) = world.sections.get(&glam::IVec3::ZERO) {
@@ -80,7 +90,7 @@ impl<'a> GameApp<'a> {
         let camera = Camera::new(player.eye_position(), 0.0, 0.0, 70.0);
 
         let hotbar_slots = [
-            BlockType::OakLog,
+            BlockType::Torch,
             BlockType::Cobblestone,
             BlockType::Dirt,
             BlockType::Stone,
@@ -88,7 +98,7 @@ impl<'a> GameApp<'a> {
             BlockType::OakPlanks,
             BlockType::OakLeaves,
             BlockType::Glass,
-            BlockType::Bricks,
+            BlockType::Lava,
         ];
         let active_slot = 0;
         let selected_block = hotbar_slots[active_slot];

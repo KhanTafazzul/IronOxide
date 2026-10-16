@@ -25,4 +25,6 @@ pub use physics::{
 #[allow(unused_imports)]
 pub use raycast::{raycast_voxel, RaycastHit, DEFAULT_MAX_REACH};
 pub use world::World;
+#[allow(unused_imports)]
+pub use crate::world::lighting;
 

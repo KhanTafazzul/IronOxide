@@ -109,6 +109,16 @@ impl SoundType {
                 hit_sound: SoundEvent::StoneDig,
                 fall_sound: SoundEvent::StoneStep,
             },
+            BlockType::Torch => Self::WOOD,
+            BlockType::Lava => Self::STONE,
+            BlockType::Water => Self {
+                volume: 1.0,
+                pitch: 1.0,
+                break_sound: SoundEvent::WaterSplash,
+                step_sound: SoundEvent::WaterSplash,
+                hit_sound: SoundEvent::WaterSplash,
+                fall_sound: SoundEvent::WaterSplash,
+            },
         }
     }
 }

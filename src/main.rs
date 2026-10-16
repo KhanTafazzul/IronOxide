@@ -22,11 +22,13 @@ use game::{
     PlayerPhysics, World, DEFAULT_MAX_REACH,
 };
 use render::atlas::{BlockType, TextureAtlas};
+use render::gui::chest_screen::ChestScreenGui;
 use render::gui::inventory::InventoryGui;
 use render::gui::{DebugMetrics, DebugOverlay};
 use render::mesher::{greedy_mesh_section, ChunkMesh};
 use render::{Camera, RenderContext};
 use storage::{load_saved_items_into_inventory, LevelData, WorldStorageManager};
+use world::tile_entity::{ChestTileEntity, TileEntity};
 
 struct GameApp<'a> {
     render_ctx: Option<RenderContext<'a>>,
@@ -43,6 +45,7 @@ struct GameApp<'a> {
     hotbar_slots: [BlockType; 9],
     inventory: PlayerInventory,
     inventory_gui: InventoryGui,
+    chest_gui: ChestScreenGui,
     stats: PlayerStats,
     mining_tracker: BlockMiningTracker,
     item_entities: ItemEntityManager,
@@ -207,6 +210,7 @@ impl<'a> GameApp<'a> {
             hotbar_slots,
             inventory,
             inventory_gui,
+            chest_gui: ChestScreenGui::new(),
             stats: PlayerStats::new(),
             mining_tracker,
             item_entities: ItemEntityManager::new(),
@@ -346,6 +350,24 @@ impl<'a> GameApp<'a> {
             DEFAULT_MAX_REACH,
             &self.world,
         ) {
+            // Check if right-clicking an existing Chest block
+            if self.world.get_block(hit.block_pos) == BlockType::Chest {
+                if self.world.get_tile_entity(hit.block_pos).is_none() {
+                    self.world.set_tile_entity(
+                        hit.block_pos,
+                        TileEntity::Chest(ChestTileEntity::new(hit.block_pos)),
+                    );
+                }
+                if let Some(ctx) = &self.render_ctx {
+                    let window = Arc::clone(&ctx.window);
+                    self.chest_gui.open(hit.block_pos, &window);
+                    self.mouse_captured = false;
+                    self.left_mouse_held = false;
+                    self.mining_tracker.reset();
+                }
+                return;
+            }
+
             let place_pos = hit.place_pos();
             let block_box = Aabb::from_block(place_pos.x, place_pos.y, place_pos.z);
             if !block_box.intersects(&self.player.bounding_box()) {
@@ -427,16 +449,16 @@ impl<'a> ApplicationHandler for GameApp<'a> {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 if let Some(ctx) = &self.render_ctx {
-                    self.inventory_gui.update_mouse(
-                        position.x as f32,
-                        position.y as f32,
-                        ctx.config.width as f32,
-                        ctx.config.height as f32,
-                    );
+                    let mx = position.x as f32;
+                    let my = position.y as f32;
+                    let sw = ctx.config.width as f32;
+                    let sh = ctx.config.height as f32;
+                    self.inventory_gui.update_mouse(mx, my, sw, sh);
+                    self.chest_gui.update_mouse(mx, my, sw, sh);
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                if self.inventory_gui.is_open {
+                if self.inventory_gui.is_open || self.chest_gui.is_open {
                     return;
                 }
                 let scroll = match delta {
@@ -454,7 +476,20 @@ impl<'a> ApplicationHandler for GameApp<'a> {
             WindowEvent::MouseInput { button, state, .. } => {
                 match state {
                     ElementState::Pressed => {
-                        if self.inventory_gui.is_open {
+                        if self.chest_gui.is_open {
+                            if let Some(chest_pos) = self.chest_gui.chest_pos {
+                                if let Some(TileEntity::Chest(chest)) =
+                                    self.world.get_tile_entity_mut(chest_pos)
+                                {
+                                    self.chest_gui.handle_mouse_click(
+                                        button,
+                                        self.key_shift,
+                                        chest,
+                                        &mut self.inventory,
+                                    );
+                                }
+                            }
+                        } else if self.inventory_gui.is_open {
                             self.inventory_gui.handle_mouse_click(button, &mut self.inventory);
                             // Update active block from current hotbar slot
                             if let Some(stack) = self.inventory.hotbar[self.active_slot] {
@@ -511,14 +546,21 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                     KeyCode::KeyE if pressed => {
                         if let Some(ctx) = &self.render_ctx {
                             let window = Arc::clone(&ctx.window);
-                            self.inventory_gui.toggle(&window);
-                            self.mouse_captured = !self.inventory_gui.is_open;
-                            self.left_mouse_held = false;
-                            self.mining_tracker.reset();
-                            if !self.inventory_gui.is_open {
-                                if let Some(stack) = self.inventory.hotbar[self.active_slot] {
-                                    if let Some(block) = stack.to_block() {
-                                        self.selected_block = block;
+                            if self.chest_gui.is_open {
+                                self.chest_gui.close(&window);
+                                self.mouse_captured = true;
+                                self.left_mouse_held = false;
+                                self.mining_tracker.reset();
+                            } else {
+                                self.inventory_gui.toggle(&window);
+                                self.mouse_captured = !self.inventory_gui.is_open;
+                                self.left_mouse_held = false;
+                                self.mining_tracker.reset();
+                                if !self.inventory_gui.is_open {
+                                    if let Some(stack) = self.inventory.hotbar[self.active_slot] {
+                                        if let Some(block) = stack.to_block() {
+                                            self.selected_block = block;
+                                        }
                                     }
                                 }
                             }
@@ -535,7 +577,12 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                     KeyCode::Escape if pressed => {
                         if let Some(ctx) = &self.render_ctx {
                             let window = Arc::clone(&ctx.window);
-                            if self.inventory_gui.is_open {
+                            if self.chest_gui.is_open {
+                                self.chest_gui.close(&window);
+                                self.mouse_captured = true;
+                                self.left_mouse_held = false;
+                                self.mining_tracker.reset();
+                            } else if self.inventory_gui.is_open {
                                 self.inventory_gui.close(&window);
                                 self.mouse_captured = true;
                                 self.left_mouse_held = false;
@@ -550,22 +597,22 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                             }
                         }
                     }
-                    KeyCode::KeyW => self.key_w = pressed && !self.inventory_gui.is_open,
-                    KeyCode::KeyS => self.key_s = pressed && !self.inventory_gui.is_open,
-                    KeyCode::KeyA => self.key_a = pressed && !self.inventory_gui.is_open,
-                    KeyCode::KeyD => self.key_d = pressed && !self.inventory_gui.is_open,
-                    KeyCode::Space => self.key_space = pressed && !self.inventory_gui.is_open,
-                    KeyCode::ShiftLeft | KeyCode::ShiftRight => self.key_shift = pressed && !self.inventory_gui.is_open,
+                    KeyCode::KeyW => self.key_w = pressed && !self.inventory_gui.is_open && !self.chest_gui.is_open,
+                    KeyCode::KeyS => self.key_s = pressed && !self.inventory_gui.is_open && !self.chest_gui.is_open,
+                    KeyCode::KeyA => self.key_a = pressed && !self.inventory_gui.is_open && !self.chest_gui.is_open,
+                    KeyCode::KeyD => self.key_d = pressed && !self.inventory_gui.is_open && !self.chest_gui.is_open,
+                    KeyCode::Space => self.key_space = pressed && !self.inventory_gui.is_open && !self.chest_gui.is_open,
+                    KeyCode::ShiftLeft | KeyCode::ShiftRight => self.key_shift = pressed,
                     // Hotbar slot switching (1 to 9)
-                    KeyCode::Digit1 if pressed && !self.inventory_gui.is_open => self.set_active_slot(0),
-                    KeyCode::Digit2 if pressed && !self.inventory_gui.is_open => self.set_active_slot(1),
-                    KeyCode::Digit3 if pressed && !self.inventory_gui.is_open => self.set_active_slot(2),
-                    KeyCode::Digit4 if pressed && !self.inventory_gui.is_open => self.set_active_slot(3),
-                    KeyCode::Digit5 if pressed && !self.inventory_gui.is_open => self.set_active_slot(4),
-                    KeyCode::Digit6 if pressed && !self.inventory_gui.is_open => self.set_active_slot(5),
-                    KeyCode::Digit7 if pressed && !self.inventory_gui.is_open => self.set_active_slot(6),
-                    KeyCode::Digit8 if pressed && !self.inventory_gui.is_open => self.set_active_slot(7),
-                    KeyCode::Digit9 if pressed && !self.inventory_gui.is_open => self.set_active_slot(8),
+                    KeyCode::Digit1 if pressed && !self.inventory_gui.is_open && !self.chest_gui.is_open => self.set_active_slot(0),
+                    KeyCode::Digit2 if pressed && !self.inventory_gui.is_open && !self.chest_gui.is_open => self.set_active_slot(1),
+                    KeyCode::Digit3 if pressed && !self.inventory_gui.is_open && !self.chest_gui.is_open => self.set_active_slot(2),
+                    KeyCode::Digit4 if pressed && !self.inventory_gui.is_open && !self.chest_gui.is_open => self.set_active_slot(3),
+                    KeyCode::Digit5 if pressed && !self.inventory_gui.is_open && !self.chest_gui.is_open => self.set_active_slot(4),
+                    KeyCode::Digit6 if pressed && !self.inventory_gui.is_open && !self.chest_gui.is_open => self.set_active_slot(5),
+                    KeyCode::Digit7 if pressed && !self.inventory_gui.is_open && !self.chest_gui.is_open => self.set_active_slot(6),
+                    KeyCode::Digit8 if pressed && !self.inventory_gui.is_open && !self.chest_gui.is_open => self.set_active_slot(7),
+                    KeyCode::Digit9 if pressed && !self.inventory_gui.is_open && !self.chest_gui.is_open => self.set_active_slot(8),
                     _ => {}
                 }
             }
@@ -759,9 +806,24 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                     let off_hand = self.inventory.offhand;
                     let dynamic_light = render::calculate_dynamic_light(main_hand, off_hand, self.player.eye_position());
 
+                    let chest_tuple = if self.chest_gui.is_open {
+                        if let Some(pos) = self.chest_gui.chest_pos {
+                            if let Some(TileEntity::Chest(chest)) = self.world.get_tile_entity(pos) {
+                                Some((&self.chest_gui, chest, &self.inventory, self.atlas.as_ref()))
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
                     if let Err(e) = ctx.render(
                         self.active_slot,
                         Some((&self.inventory_gui, &self.inventory)),
+                        chest_tuple,
                         active_mining_target,
                         camera_right,
                         camera_up,
@@ -782,7 +844,7 @@ impl<'a> ApplicationHandler for GameApp<'a> {
     }
 
     fn device_event(&mut self, _event_loop: &ActiveEventLoop, _device_id: DeviceId, event: DeviceEvent) {
-        if !self.mouse_captured || self.inventory_gui.is_open {
+        if !self.mouse_captured || self.inventory_gui.is_open || self.chest_gui.is_open {
             return;
         }
 

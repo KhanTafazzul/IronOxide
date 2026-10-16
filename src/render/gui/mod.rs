@@ -19,9 +19,11 @@ use wgpu::util::DeviceExt;
 pub mod hud;
 pub mod inventory;
 pub mod debug;
+pub mod chest_screen;
 pub use hud::HudRenderer;
 pub use inventory::InventoryGui;
 pub use debug::{DebugMetrics, DebugOverlay};
+pub use chest_screen::ChestScreenGui;
 
 use crate::game::inventory::PlayerInventory;
 use crate::render::atlas::TextureAtlas;
@@ -98,6 +100,7 @@ pub struct GuiAtlas {
     pub food_empty_uv: GuiRect,
     pub food_full_uv: GuiRect,
     pub food_half_uv: GuiRect,
+    pub chest_container_uv: GuiRect,
     #[allow(dead_code)]
     pub font_uv: GuiRect,
 }
@@ -122,6 +125,7 @@ impl GuiAtlas {
         let mut food_empty_img: Option<RgbaImage> = None;
         let mut food_full_img: Option<RgbaImage> = None;
         let mut food_half_img: Option<RgbaImage> = None;
+        let mut chest_img: Option<RgbaImage> = None;
         let mut font_img: Option<RgbaImage> = None;
 
         let resolved_path = jar_path
@@ -217,6 +221,30 @@ impl GuiAtlas {
                         if entry.read_to_end(&mut buf).is_ok() {
                             if let Ok(img) = image::load_from_memory(&buf) {
                                 food_half_img = Some(img.to_rgba8());
+                            }
+                        }
+                    }
+                    if let Ok(mut entry) = archive.by_name("assets/minecraft/textures/gui/container/generic_54.png") {
+                        let mut buf = Vec::new();
+                        if entry.read_to_end(&mut buf).is_ok() {
+                            if let Ok(img) = image::load_from_memory(&buf) {
+                                let full = img.to_rgba8();
+                                let mut cropped = RgbaImage::new(176, 168);
+                                for y in 0..71 {
+                                    for x in 0..176 {
+                                        if x < full.width() && y < full.height() {
+                                            cropped.put_pixel(x, y, *full.get_pixel(x, y));
+                                        }
+                                    }
+                                }
+                                for y in 0..96 {
+                                    for x in 0..176 {
+                                        if x < full.width() && (126 + y) < full.height() {
+                                            cropped.put_pixel(x, 71 + y, *full.get_pixel(x, 126 + y));
+                                        }
+                                    }
+                                }
+                                chest_img = Some(cropped);
                             }
                         }
                     }
@@ -640,6 +668,35 @@ impl GuiAtlas {
             v_max: (font_y_off + font_bitmap.height()) as f32 / size as f32,
         };
 
+        let chest_bg = chest_img.unwrap_or_else(|| {
+            let mut img = RgbaImage::new(176, 168);
+            for y in 0..168 {
+                for x in 0..176 {
+                    let border = x == 0 || x == 175 || y == 0 || y == 167;
+                    if border {
+                        img.put_pixel(x, y, Rgba([55, 55, 55, 255]));
+                    } else {
+                        img.put_pixel(x, y, Rgba([198, 198, 198, 255]));
+                    }
+                }
+            }
+            img
+        });
+
+        // Paste chest container (176x168) at (0, 230)
+        let chest_y_off = 230;
+        for y in 0..chest_bg.height().min(size - chest_y_off) {
+            for x in 0..chest_bg.width().min(size) {
+                atlas_image.put_pixel(x, chest_y_off + y, *chest_bg.get_pixel(x, y));
+            }
+        }
+        let chest_container_uv = GuiRect {
+            u_min: 0.0,
+            v_min: chest_y_off as f32 / size as f32,
+            u_max: chest_bg.width() as f32 / size as f32,
+            v_max: (chest_y_off + chest_bg.height()) as f32 / size as f32,
+        };
+
         Self {
             width: size,
             height: size,
@@ -655,6 +712,7 @@ impl GuiAtlas {
             food_empty_uv,
             food_full_uv,
             food_half_uv,
+            chest_container_uv,
             font_uv,
         }
     }
@@ -981,6 +1039,12 @@ impl GuiRenderer {
         screen_height: u32,
         active_slot: usize,
         inventory_gui: Option<(&InventoryGui, &PlayerInventory)>,
+        chest_gui: Option<(
+            &ChestScreenGui,
+            &crate::world::tile_entity::ChestTileEntity,
+            &PlayerInventory,
+            &TextureAtlas,
+        )>,
         player_stats: Option<&crate::game::stats::PlayerStats>,
         debug_overlay: Option<(&DebugOverlay, &DebugMetrics)>,
     ) {
@@ -1006,12 +1070,30 @@ impl GuiRenderer {
         let mut cross_vertices = Vec::with_capacity(4);
         let mut cross_indices = Vec::with_capacity(6);
 
+        let is_chest_open = chest_gui
+            .as_ref()
+            .map(|(c, _, _, _)| c.is_open)
+            .unwrap_or(false);
+
         let is_inventory_open = inventory_gui
             .as_ref()
             .map(|(inv, _)| inv.is_open)
             .unwrap_or(false);
 
-        if is_inventory_open {
+        if is_chest_open {
+            if let Some((c_gui, c_tile, inv, t_atlas)) = chest_gui {
+                c_gui.build_render_mesh(
+                    c_tile,
+                    inv,
+                    &self.atlas,
+                    t_atlas,
+                    sw,
+                    sh,
+                    &mut normal_vertices,
+                    &mut normal_indices,
+                );
+            }
+        } else if is_inventory_open {
             if let Some((inv_gui, inv_data)) = inventory_gui {
                 inv_gui.build_render_mesh(
                     inv_data,

@@ -37,6 +37,7 @@ pub const ITEM_OBSIDIAN: u16 = 20;
 pub const ITEM_LANTERN: u16 = 21;
 pub const ITEM_GLOWSTONE: u16 = 22;
 pub const ITEM_VINE: u16 = 23;
+pub const ITEM_CHEST: u16 = 24;
 
 // REA Slot Constants from cjc.class
 pub const RESULT_SLOT: usize = 0;
@@ -116,6 +117,7 @@ impl ItemStack {
             ITEM_CRAFTING_TABLE => "Crafting Table",
             ITEM_STICK => "Stick",
             ITEM_VINE => "Vines",
+            ITEM_CHEST => "Chest",
             _ => "Unknown Item",
         }
     }
@@ -140,6 +142,7 @@ impl ItemStack {
             BlockType::Water => ITEM_WATER,
             BlockType::Obsidian => ITEM_OBSIDIAN,
             BlockType::Vine => ITEM_VINE,
+            BlockType::Chest => ITEM_CHEST,
         };
         Some(Self::new(id, count))
     }
@@ -163,6 +166,7 @@ impl ItemStack {
             ITEM_WATER => Some(BlockType::Water),
             ITEM_OBSIDIAN => Some(BlockType::Obsidian),
             ITEM_VINE => Some(BlockType::Vine),
+            ITEM_CHEST => Some(BlockType::Chest),
             _ => None,
         }
     }

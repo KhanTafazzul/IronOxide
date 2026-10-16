@@ -188,6 +188,12 @@ impl<'w> RenderContext<'w> {
         &mut self,
         active_slot: usize,
         inventory_gui: Option<(&crate::render::gui::InventoryGui, &crate::game::inventory::PlayerInventory)>,
+        chest_gui: Option<(
+            &crate::render::gui::ChestScreenGui,
+            &crate::world::tile_entity::ChestTileEntity,
+            &crate::game::inventory::PlayerInventory,
+            &crate::render::atlas::TextureAtlas,
+        )>,
         mining_target: Option<(glam::IVec3, usize)>,
         camera_right: glam::Vec3,
         camera_up: glam::Vec3,
@@ -301,6 +307,7 @@ impl<'w> RenderContext<'w> {
             self.config.height,
             active_slot,
             inventory_gui,
+            chest_gui,
             player_stats,
             debug_overlay,
         );

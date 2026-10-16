@@ -121,6 +121,7 @@ pub trait BlockReader: Send + Sync {
 pub struct ChunkSection {
     pub position: IVec3,
     pub blocks: [BlockType; SECTION_VOLUME],
+    pub tile_entities: std::collections::HashMap<IVec3, crate::world::tile_entity::TileEntity>,
 }
 
 impl ChunkSection {
@@ -128,6 +129,7 @@ impl ChunkSection {
         Self {
             position,
             blocks: [BlockType::Air; SECTION_VOLUME],
+            tile_entities: std::collections::HashMap::new(),
         }
     }
 
@@ -161,6 +163,25 @@ impl ChunkSection {
     #[inline(always)]
     pub fn set(&mut self, x: usize, y: usize, z: usize, block: BlockType) {
         self.set_block(x, y, z, block);
+    }
+
+    pub fn get_tile_entity(&self, local_pos: IVec3) -> Option<&crate::world::tile_entity::TileEntity> {
+        self.tile_entities.get(&local_pos)
+    }
+
+    pub fn get_tile_entity_mut(
+        &mut self,
+        local_pos: IVec3,
+    ) -> Option<&mut crate::world::tile_entity::TileEntity> {
+        self.tile_entities.get_mut(&local_pos)
+    }
+
+    pub fn set_tile_entity(&mut self, local_pos: IVec3, entity: crate::world::tile_entity::TileEntity) {
+        self.tile_entities.insert(local_pos, entity);
+    }
+
+    pub fn remove_tile_entity(&mut self, local_pos: IVec3) -> Option<crate::world::tile_entity::TileEntity> {
+        self.tile_entities.remove(&local_pos)
     }
 }
 

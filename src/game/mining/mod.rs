@@ -20,7 +20,7 @@ pub fn get_block_hardness(block: BlockType) -> f32 {
         BlockType::Dirt | BlockType::GrassBlock | BlockType::Sand => 0.5,
         BlockType::Stone => 1.5,
         BlockType::Cobblestone | BlockType::Bricks => 2.0,
-        BlockType::OakLog | BlockType::OakPlanks => 2.0,
+        BlockType::OakLog | BlockType::OakPlanks | BlockType::Chest => 2.0,
         BlockType::Deepslate => 3.0,
         BlockType::OakLeaves | BlockType::Vine => 0.2,
         BlockType::Glass => 0.3,
@@ -68,8 +68,8 @@ pub fn calculate_break_time(block: BlockType, held_item: Option<ItemStack>) -> O
                 15.0
             }
         }
-        // Wood logs & planks: 1.5s with axe, 3.0s with bare hand
-        BlockType::OakLog | BlockType::OakPlanks => {
+        // Wood logs, planks & chest: 1.5s with axe, 3.0s with bare hand
+        BlockType::OakLog | BlockType::OakPlanks | BlockType::Chest => {
             if is_axe {
                 1.5
             } else {

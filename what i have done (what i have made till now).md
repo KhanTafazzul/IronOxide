@@ -3,8 +3,8 @@
 
 > **Project Goal**: Re-implement Minecraft 1.20.4 client and voxel engine from scratch in **Rust** using **WGPU** and **WGSL** shaders by reverse-engineering `client.jar` using decompilation and exact vanilla algorithms.
 >
-> **Status**: **128 / 128 Unit & Integration Tests Passing** ✅
-> **Last Updated**: Tasks 1 through 25 Fully Completed & Verified.
+> **Status**: **135 / 135 Unit & Integration Tests Passing** ✅
+> **Last Updated**: Tasks 1 through 26 Fully Completed & Verified.
 
 ---
 
@@ -32,6 +32,7 @@
 | **Task 23: level.dat World Metadata** | `src/storage/level_data.rs` | ✅ Done | Gzip NBT parser, LevelName, GameType, Time, Spawn, Player pos/rot/inv persistence |
 | **Task 24: Biome Colormap Tinting** | `src/render/colormap.rs` | ✅ Done | Triangular barycentric UV colormap sampling, 3x3 neighbor kernel, per-vertex tints |
 | **Task 25: Volumetric Precipitation** | `src/world/weather.rs`, `src/render/weather_renderer.rs` | ✅ Done | Rain/Snow/Thunder state machine, lapse rate, 32x32x32 particle box, scrolling rain sheets |
+| **Task 26: Tile Entities & Chest UI** | `src/world/tile_entity.rs`, `src/render/gui/chest_screen.rs` | ✅ Done | Chunk section tile entity storage, 27-slot chest NBT serialization, 176x168 container GUI, shift-click transfer |
 
 ---
 
@@ -241,11 +242,38 @@
 
 ---
 
+### 18. Task 26: Tile Entities & Chest UI Container
+- **Module**: `src/world/tile_entity.rs`, `src/render/gui/chest_screen.rs`, `src/render/context.rs`, `src/main.rs`
+- **REA Decompiled References**:
+  - `net.minecraft.world.level.block.entity.ChestBlockEntity` (`dhc.class`)
+  - `net.minecraft.client.gui.screens.inventory.ContainerScreen` (`fel.class`)
+  - `net.minecraft.world.inventory.ChestMenu` (`cii.class`)
+- **Features**:
+  - **Chunk Section Tile Entity Storage**:
+    - Chunk sections track non-standard block state tile entities via `HashMap<IVec3, TileEntity>`.
+    - Lifecycle hooks in `set_block_at`: placing a Chest automatically instantiates `ChestTileEntity`; breaking removes it.
+  - **ChestTileEntity & Anvil NBT Persistence**:
+    - 27 inventory storage slots: `[Option<ItemStack>; 27]`.
+    - Serializes and deserializes to/from Anvil chunk `block_entities` compound list with `id: "minecraft:chest"`, `x`, `y`, `z`, and `Items` compound list.
+  - **Double-Layer Container GUI (176x168)**:
+    - Extracted from `assets/minecraft/textures/gui/container/generic_54.png` in `client.jar` (stitched into `GuiAtlas` with procedural wood/iron fallback).
+    - Top Section: 27 chest storage slots (3 rows $\times$ 9 columns, slot coordinates $x = 8 + c \times 18$, $y = 18 + r \times 18$).
+    - Bottom Section: 36 player inventory slots (27 main storage $y = 84 + r \times 18$ + 9 hotbar $y = 142$).
+  - **Shift-Click Quick Transfer (`ChestMenu.quickMoveStack`)**:
+    - Shift-clicking chest slots merges items into player hotbar first, then main inventory.
+    - Shift-clicking player hotbar or main inventory merges items into chest storage.
+  - **Full Mouse Slot Manipulation**:
+    - Left-click pickup, place, and merge with max stack clamping.
+    - Right-click split half-stack into cursor or place single items.
+    - Floating cursor stack with count badges, slot hover highlight, and movement halting while container is open.
+
+---
+
 ## 📈 Test Suite & Verification Status
 
 ```text
-running 128 tests
-test result: ok. 128 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.10s
+running 135 tests
+test result: ok. 135 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.92s
 ```
 
 All subsystems have dedicated unit and integration tests covering:

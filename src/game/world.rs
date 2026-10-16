@@ -109,6 +109,20 @@ impl World {
             self.fluids.remove_fluid_state(world_pos);
         }
 
+        // Tile Entity lifecycle tracking
+        if block == BlockType::Chest {
+            if self.get_tile_entity(world_pos).is_none() {
+                self.set_tile_entity(
+                    world_pos,
+                    crate::world::tile_entity::TileEntity::Chest(
+                        crate::world::tile_entity::ChestTileEntity::new(world_pos),
+                    ),
+                );
+            }
+        } else if old_block == BlockType::Chest && block != BlockType::Chest {
+            self.remove_tile_entity(world_pos);
+        }
+
         // Lighting BFS updates
         let mut light_affected = if block.is_air() && !old_block.is_air() {
             self.lighting.on_block_broken(world_pos, old_block, &self.sections)
@@ -122,6 +136,77 @@ impl World {
         affected.sort_by_key(|p| (p.x, p.y, p.z));
         affected.dedup();
         affected
+    }
+
+    /// Read TileEntity at world coordinates (x, y, z)
+    pub fn get_tile_entity(&self, world_pos: IVec3) -> Option<&crate::world::tile_entity::TileEntity> {
+        let size = SECTION_SIZE as i32;
+        let sec_pos = IVec3::new(
+            world_pos.x.div_euclid(size),
+            world_pos.y.div_euclid(size),
+            world_pos.z.div_euclid(size),
+        );
+        let local_pos = IVec3::new(
+            world_pos.x.rem_euclid(size),
+            world_pos.y.rem_euclid(size),
+            world_pos.z.rem_euclid(size),
+        );
+        self.sections.get(&sec_pos).and_then(|s| s.get_tile_entity(local_pos))
+    }
+
+    /// Read mutable TileEntity at world coordinates (x, y, z)
+    pub fn get_tile_entity_mut(
+        &mut self,
+        world_pos: IVec3,
+    ) -> Option<&mut crate::world::tile_entity::TileEntity> {
+        let size = SECTION_SIZE as i32;
+        let sec_pos = IVec3::new(
+            world_pos.x.div_euclid(size),
+            world_pos.y.div_euclid(size),
+            world_pos.z.div_euclid(size),
+        );
+        let local_pos = IVec3::new(
+            world_pos.x.rem_euclid(size),
+            world_pos.y.rem_euclid(size),
+            world_pos.z.rem_euclid(size),
+        );
+        self.sections.get_mut(&sec_pos).and_then(|s| s.get_tile_entity_mut(local_pos))
+    }
+
+    /// Place TileEntity at world coordinates (x, y, z)
+    pub fn set_tile_entity(&mut self, world_pos: IVec3, entity: crate::world::tile_entity::TileEntity) {
+        let size = SECTION_SIZE as i32;
+        let sec_pos = IVec3::new(
+            world_pos.x.div_euclid(size),
+            world_pos.y.div_euclid(size),
+            world_pos.z.div_euclid(size),
+        );
+        let local_pos = IVec3::new(
+            world_pos.x.rem_euclid(size),
+            world_pos.y.rem_euclid(size),
+            world_pos.z.rem_euclid(size),
+        );
+        let section = self.get_or_create_section(sec_pos);
+        section.set_tile_entity(local_pos, entity);
+    }
+
+    /// Remove TileEntity at world coordinates (x, y, z)
+    pub fn remove_tile_entity(
+        &mut self,
+        world_pos: IVec3,
+    ) -> Option<crate::world::tile_entity::TileEntity> {
+        let size = SECTION_SIZE as i32;
+        let sec_pos = IVec3::new(
+            world_pos.x.div_euclid(size),
+            world_pos.y.div_euclid(size),
+            world_pos.z.div_euclid(size),
+        );
+        let local_pos = IVec3::new(
+            world_pos.x.rem_euclid(size),
+            world_pos.y.rem_euclid(size),
+            world_pos.z.rem_euclid(size),
+        );
+        self.sections.get_mut(&sec_pos).and_then(|s| s.remove_tile_entity(local_pos))
     }
 }
 

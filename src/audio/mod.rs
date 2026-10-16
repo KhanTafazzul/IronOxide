@@ -92,7 +92,7 @@ impl SoundType {
             BlockType::Stone | BlockType::Cobblestone | BlockType::Deepslate | BlockType::Bricks | BlockType::Bedrock | BlockType::Obsidian => {
                 Self::STONE
             }
-            BlockType::OakLog | BlockType::OakPlanks => Self::WOOD,
+            BlockType::OakLog | BlockType::OakPlanks | BlockType::Chest => Self::WOOD,
             BlockType::Sand => Self::GRAVEL,
             BlockType::OakLeaves | BlockType::Vine => Self {
                 volume: 0.8,

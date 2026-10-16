@@ -57,6 +57,7 @@ pub enum BlockType {
     Water,
     Obsidian,
     Vine,
+    Chest,
 }
 
 impl BlockType {
@@ -225,7 +226,7 @@ impl TextureAtlas {
 
     /// Provides fallback 16x16 textures if texture is missing or jar cannot be opened
     fn ensure_fallbacks(sprites: &mut HashMap<String, RgbaImage>) {
-        let palette: [(&str, [u8; 4]); 21] = [
+        let palette: [(&str, [u8; 4]); 24] = [
             ("grass_block_top", [86, 175, 49, 255]),
             ("grass_block_side", [106, 140, 60, 255]),
             ("dirt", [134, 96, 67, 255]),
@@ -246,6 +247,9 @@ impl TextureAtlas {
             ("lava", [240, 110, 20, 255]),
             ("water", [40, 80, 220, 180]),
             ("vine", [75, 145, 45, 255]),
+            ("chest_top", [160, 115, 60, 255]),
+            ("chest_side", [150, 105, 55, 255]),
+            ("chest_front", [140, 95, 50, 255]),
             ("missing", [255, 0, 255, 255]),
         ];
 
@@ -395,6 +399,11 @@ impl TextureAtlas {
             BlockType::Water => "water",
             BlockType::Obsidian => "obsidian",
             BlockType::Vine => "vine",
+            BlockType::Chest => match face {
+                Direction::Up | Direction::Down => "chest_top",
+                Direction::North => "chest_front",
+                _ => "chest_side",
+            },
         };
 
         self.get_sprite(sprite_name).to_array()

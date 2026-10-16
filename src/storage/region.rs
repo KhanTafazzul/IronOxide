@@ -263,6 +263,7 @@ pub fn block_to_vanilla_name(block: BlockType) -> &'static str {
         BlockType::Water => "minecraft:water",
         BlockType::Obsidian => "minecraft:obsidian",
         BlockType::Vine => "minecraft:vine",
+        BlockType::Chest => "minecraft:chest",
     }
 }
 
@@ -285,6 +286,7 @@ pub fn vanilla_name_to_block(name: &str) -> BlockType {
         "minecraft:water" => BlockType::Water,
         "minecraft:obsidian" => BlockType::Obsidian,
         "minecraft:vine" => BlockType::Vine,
+        "minecraft:chest" => BlockType::Chest,
         _ => BlockType::Air,
     }
 }
@@ -382,6 +384,19 @@ pub fn serialize_chunk_column(
     }
 
     root.insert("sections", NbtTag::List(TAG_COMPOUND, section_list));
+
+    // 3. Block Entities list (id: "minecraft:chest", etc.)
+    let mut block_entities = Vec::new();
+    for &(_sec_y, section, _light_opt) in sections {
+        for (_local_pos, te) in &section.tile_entities {
+            block_entities.push(te.clone());
+        }
+    }
+    root.insert(
+        "block_entities",
+        crate::world::tile_entity::serialize_block_entities(&block_entities),
+    );
+
     serialize_compound(&root)
 }
 
@@ -474,6 +489,22 @@ pub fn deserialize_chunk_column(
         }
 
         result.push((sec_y, section, light_opt));
+    }
+
+    if let Some(be_tag) = compound.get("block_entities") {
+        let entities = crate::world::tile_entity::deserialize_block_entities(be_tag);
+        for entity in entities {
+            let pos = entity.position();
+            let sec_y = pos.y.div_euclid(16);
+            let local_pos = IVec3::new(
+                pos.x.rem_euclid(16),
+                pos.y.rem_euclid(16),
+                pos.z.rem_euclid(16),
+            );
+            if let Some((_, section, _)) = result.iter_mut().find(|(y, _, _)| *y == sec_y) {
+                section.set_tile_entity(local_pos, entity);
+            }
+        }
     }
 
     Ok(result)

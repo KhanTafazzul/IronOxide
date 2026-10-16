@@ -1,12 +1,14 @@
 pub mod entities;
 pub mod inventory;
 pub mod mining;
+pub mod mobs;
 pub mod physics;
 pub mod raycast;
 pub mod stats;
 pub mod world;
 
 pub use entities::{ItemEntity, ItemEntityManager};
+pub use mobs::{MobEcs, MobEntity, MobEvent, MobType, MobAiState};
 
 #[allow(unused_imports)]
 pub use stats::PlayerStats;

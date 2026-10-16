@@ -5,6 +5,7 @@ pub mod effects;
 pub mod entity_renderer;
 pub mod gui;
 pub mod mesher;
+pub mod models;
 pub mod uniforms;
 
 #[allow(unused_imports)]
@@ -18,6 +19,7 @@ pub use entity_renderer::EntityRenderer;
 pub use gui::{inventory::InventoryGui, GuiAtlas, GuiRect, GuiRenderer, GuiVertex};
 #[allow(unused_imports)]
 pub use mesher::{AsyncChunkMesher, BlockVertex, ChunkMesh, ChunkSection, greedy_mesh_section};
+pub use models::{HumanoidModel, MobRenderer};
 #[allow(unused_imports)]
 pub use uniforms::CameraUniform;
 

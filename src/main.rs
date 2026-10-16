@@ -17,8 +17,8 @@ use audio::{AudioSystem, FootstepTracker, SoundEvent, SoundType};
 use game::inventory::{ItemStack, PlayerInventory};
 use game::stats::PlayerStats;
 use game::{
-    raycast_voxel, Aabb, BlockMiningTracker, ItemEntityManager, MiningUpdateResult, PlayerInput, PlayerPhysics, World,
-    DEFAULT_MAX_REACH,
+    raycast_voxel, Aabb, BlockMiningTracker, ItemEntityManager, MobEcs, MobEvent, MiningUpdateResult, PlayerInput,
+    PlayerPhysics, World, DEFAULT_MAX_REACH,
 };
 use render::atlas::{BlockType, TextureAtlas};
 use render::gui::inventory::InventoryGui;
@@ -40,6 +40,7 @@ struct GameApp<'a> {
     stats: PlayerStats,
     mining_tracker: BlockMiningTracker,
     item_entities: ItemEntityManager,
+    mobs: MobEcs,
     left_mouse_held: bool,
     mouse_captured: bool,
     audio: AudioSystem,
@@ -118,6 +119,9 @@ impl<'a> GameApp<'a> {
         let last_player_pos = spawn_pos;
         let last_hit_sound_time = Instant::now();
 
+        let mut mobs = MobEcs::new();
+        mobs.spawn_zombie(glam::Vec3::new(12.0, 1.0, 12.0));
+
         Self {
             render_ctx: None,
             camera,
@@ -133,6 +137,7 @@ impl<'a> GameApp<'a> {
             stats: PlayerStats::new(),
             mining_tracker,
             item_entities: ItemEntityManager::new(),
+            mobs,
             left_mouse_held: false,
             mouse_captured: false,
             audio,
@@ -563,6 +568,25 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                     );
                 }
 
+                // Tick mob ECS: state machine (Idle, Targeting, Attack), A* pathfinding, and damage
+                let mob_events = self.mobs.tick(self.camera.eye, &mut self.stats, &self.world);
+                for event in mob_events {
+                    match event {
+                        MobEvent::ZombieAttack { pos, .. } => {
+                            let pitch = self.audio.random_pitch(0.85);
+                            self.audio.play_spatial(
+                                SoundEvent::GrassHit,
+                                pos,
+                                self.camera.eye,
+                                self.camera.forwards(),
+                                self.camera.up(),
+                                1.0,
+                                pitch,
+                            );
+                        }
+                    }
+                }
+
                 if let Some(ctx) = &mut self.render_ctx {
                     ctx.effects_renderer.particles.update(dt, &self.world);
                     ctx.update_camera(&self.camera);
@@ -576,6 +600,7 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                         camera_up,
                         Some(&self.stats),
                         self.item_entities.active_items(),
+                        self.mobs.mobs(),
                     ) {
                         eprintln!("Render error: {e:?}");
                     }

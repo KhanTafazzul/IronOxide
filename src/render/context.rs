@@ -158,6 +158,7 @@ impl<'w> RenderContext<'w> {
         mining_target: Option<(glam::IVec3, usize)>,
         camera_right: glam::Vec3,
         camera_up: glam::Vec3,
+        player_stats: Option<&crate::game::stats::PlayerStats>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let output = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(tex) | wgpu::CurrentSurfaceTexture::Suboptimal(tex) => tex,
@@ -229,6 +230,7 @@ impl<'w> RenderContext<'w> {
             self.config.height,
             active_slot,
             inventory_gui,
+            player_stats,
         );
 
         self.queue.submit(std::iter::once(encoder.finish()));

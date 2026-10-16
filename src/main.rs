@@ -14,6 +14,7 @@ use winit::window::{CursorGrabMode, Window, WindowId};
 
 use audio::{AudioSystem, FootstepTracker, SoundEvent, SoundType};
 use game::inventory::{ItemStack, PlayerInventory};
+use game::stats::PlayerStats;
 use game::{
     raycast_voxel, Aabb, BlockMiningTracker, MiningUpdateResult, PlayerInput, PlayerPhysics, World,
     DEFAULT_MAX_REACH,
@@ -35,6 +36,7 @@ struct GameApp<'a> {
     hotbar_slots: [BlockType; 9],
     inventory: PlayerInventory,
     inventory_gui: InventoryGui,
+    stats: PlayerStats,
     mining_tracker: BlockMiningTracker,
     left_mouse_held: bool,
     mouse_captured: bool,
@@ -117,6 +119,7 @@ impl<'a> GameApp<'a> {
             hotbar_slots,
             inventory,
             inventory_gui,
+            stats: PlayerStats::new(),
             mining_tracker,
             left_mouse_held: false,
             mouse_captured: false,
@@ -228,6 +231,11 @@ impl<'a> GameApp<'a> {
             yaw_degrees: self.camera.yaw,
         };
 
+        // Physical activity triggers: Jumping adds 0.05 exhaustion (sprint-jump adds 0.2)
+        if input.jump && self.player.on_ground {
+            self.stats.on_jump(input.sprint);
+        }
+
         self.player.tick(&input, &self.world);
         self.camera.eye = self.player.eye_position();
 
@@ -237,6 +245,11 @@ impl<'a> GameApp<'a> {
         let dz = current_pos.z - self.last_player_pos.z;
         let horizontal_disp = (dx * dx + dz * dz).sqrt();
         self.last_player_pos = current_pos;
+
+        // Physical activity triggers: Sprinting adds 0.1 exhaustion per meter
+        if input.sprint && horizontal_disp > 0.0 {
+            self.stats.on_sprint_move(horizontal_disp);
+        }
 
         if self.footstep_tracker.update(horizontal_disp, self.player.on_ground) {
             let block_under_coord = glam::IVec3::new(
@@ -497,6 +510,7 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                 self.last_frame = now;
 
                 self.update_physics(dt);
+                self.stats.update(dt);
 
                 // REA Verified: Mining progress tracking & block break resolution
                 let raycast_hit = if self.inventory_gui.is_open || !self.mouse_captured {
@@ -541,6 +555,9 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                         let affected = self.world.set_block_at(pos, BlockType::Air);
                         self.remesh_sections(&affected);
 
+                        // Physical activity trigger: Breaking a block adds 0.005 exhaustion
+                        self.stats.on_block_break();
+
                         // 3D Spatial block break sound
                         let sound_type = SoundType::for_block(block);
                         let pitch = self.audio.random_pitch(sound_type.pitch);
@@ -582,6 +599,7 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                         active_mining_target,
                         camera_right,
                         camera_up,
+                        Some(&self.stats),
                     ) {
                         eprintln!("Render error: {e:?}");
                     }

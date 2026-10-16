@@ -16,7 +16,9 @@ use bytemuck::{Pod, Zeroable};
 use image::{Rgba, RgbaImage};
 use wgpu::util::DeviceExt;
 
+pub mod hud;
 pub mod inventory;
+pub use hud::HudRenderer;
 pub use inventory::InventoryGui;
 
 use crate::game::inventory::PlayerInventory;
@@ -88,6 +90,12 @@ pub struct GuiAtlas {
     pub crosshair_uv: GuiRect,
     pub inventory_uv: GuiRect,
     pub white_uv: GuiRect,
+    pub heart_container_uv: GuiRect,
+    pub heart_full_uv: GuiRect,
+    pub heart_half_uv: GuiRect,
+    pub food_empty_uv: GuiRect,
+    pub food_full_uv: GuiRect,
+    pub food_half_uv: GuiRect,
 }
 
 impl GuiAtlas {
@@ -104,6 +112,12 @@ impl GuiAtlas {
         let mut sel_img: Option<RgbaImage> = None;
         let mut cross_img: Option<RgbaImage> = None;
         let mut inv_img: Option<RgbaImage> = None;
+        let mut heart_cnt_img: Option<RgbaImage> = None;
+        let mut heart_full_img: Option<RgbaImage> = None;
+        let mut heart_half_img: Option<RgbaImage> = None;
+        let mut food_empty_img: Option<RgbaImage> = None;
+        let mut food_full_img: Option<RgbaImage> = None;
+        let mut food_half_img: Option<RgbaImage> = None;
 
         let resolved_path = jar_path
             .map(|p| p.to_path_buf())
@@ -150,6 +164,54 @@ impl GuiAtlas {
                                     }
                                 }
                                 inv_img = Some(cropped);
+                            }
+                        }
+                    }
+                    if let Ok(mut entry) = archive.by_name("assets/minecraft/textures/gui/sprites/hud/heart/container.png") {
+                        let mut buf = Vec::new();
+                        if entry.read_to_end(&mut buf).is_ok() {
+                            if let Ok(img) = image::load_from_memory(&buf) {
+                                heart_cnt_img = Some(img.to_rgba8());
+                            }
+                        }
+                    }
+                    if let Ok(mut entry) = archive.by_name("assets/minecraft/textures/gui/sprites/hud/heart/full.png") {
+                        let mut buf = Vec::new();
+                        if entry.read_to_end(&mut buf).is_ok() {
+                            if let Ok(img) = image::load_from_memory(&buf) {
+                                heart_full_img = Some(img.to_rgba8());
+                            }
+                        }
+                    }
+                    if let Ok(mut entry) = archive.by_name("assets/minecraft/textures/gui/sprites/hud/heart/half.png") {
+                        let mut buf = Vec::new();
+                        if entry.read_to_end(&mut buf).is_ok() {
+                            if let Ok(img) = image::load_from_memory(&buf) {
+                                heart_half_img = Some(img.to_rgba8());
+                            }
+                        }
+                    }
+                    if let Ok(mut entry) = archive.by_name("assets/minecraft/textures/gui/sprites/hud/food_empty.png") {
+                        let mut buf = Vec::new();
+                        if entry.read_to_end(&mut buf).is_ok() {
+                            if let Ok(img) = image::load_from_memory(&buf) {
+                                food_empty_img = Some(img.to_rgba8());
+                            }
+                        }
+                    }
+                    if let Ok(mut entry) = archive.by_name("assets/minecraft/textures/gui/sprites/hud/food_full.png") {
+                        let mut buf = Vec::new();
+                        if entry.read_to_end(&mut buf).is_ok() {
+                            if let Ok(img) = image::load_from_memory(&buf) {
+                                food_full_img = Some(img.to_rgba8());
+                            }
+                        }
+                    }
+                    if let Ok(mut entry) = archive.by_name("assets/minecraft/textures/gui/sprites/hud/food_half.png") {
+                        let mut buf = Vec::new();
+                        if entry.read_to_end(&mut buf).is_ok() {
+                            if let Ok(img) = image::load_from_memory(&buf) {
+                                food_half_img = Some(img.to_rgba8());
                             }
                         }
                     }
@@ -219,11 +281,155 @@ impl GuiAtlas {
             img
         });
 
+        let heart_container = heart_cnt_img.unwrap_or_else(|| {
+            let mut img = RgbaImage::new(9, 9);
+            for y in 0..9 {
+                for x in 0..9 {
+                    let is_outline = matches!(
+                        (x, y),
+                        (1, 0) | (2, 0) | (3, 0) | (5, 0) | (6, 0) | (7, 0)
+                        | (0, 1) | (4, 1) | (8, 1)
+                        | (0, 2) | (8, 2)
+                        | (0, 3) | (8, 3)
+                        | (1, 4) | (7, 4)
+                        | (2, 5) | (6, 5)
+                        | (3, 6) | (5, 6)
+                        | (4, 7)
+                    );
+                    if is_outline {
+                        img.put_pixel(x, y, Rgba([30, 30, 30, 255]));
+                    }
+                }
+            }
+            img
+        });
+
+        let heart_full = heart_full_img.unwrap_or_else(|| {
+            let mut img = RgbaImage::new(9, 9);
+            for y in 0..9 {
+                for x in 0..9 {
+                    let is_inside = match y {
+                        1 => (x >= 1 && x <= 3) || (x >= 5 && x <= 7),
+                        2..=3 => x >= 1 && x <= 7,
+                        4 => x >= 2 && x <= 6,
+                        5 => x >= 3 && x <= 5,
+                        6 => x == 4,
+                        _ => false,
+                    };
+                    if is_inside {
+                        let highlight = (x == 2 && y == 2) || (x == 6 && y == 2);
+                        if highlight {
+                            img.put_pixel(x, y, Rgba([255, 120, 120, 255]));
+                        } else {
+                            img.put_pixel(x, y, Rgba([220, 20, 20, 255]));
+                        }
+                    }
+                }
+            }
+            img
+        });
+
+        let heart_half = heart_half_img.unwrap_or_else(|| {
+            let mut img = RgbaImage::new(9, 9);
+            for y in 0..9 {
+                for x in 0..9 {
+                    let is_left_half = match y {
+                        1 => x >= 1 && x <= 3,
+                        2..=3 => x >= 1 && x <= 4,
+                        4 => x >= 2 && x <= 4,
+                        5 => x >= 3 && x <= 4,
+                        6 => x == 4,
+                        _ => false,
+                    };
+                    if is_left_half {
+                        if x == 2 && y == 2 {
+                            img.put_pixel(x, y, Rgba([255, 120, 120, 255]));
+                        } else {
+                            img.put_pixel(x, y, Rgba([220, 20, 20, 255]));
+                        }
+                    }
+                }
+            }
+            img
+        });
+
+        let food_empty = food_empty_img.unwrap_or_else(|| {
+            let mut img = RgbaImage::new(9, 9);
+            for y in 0..9 {
+                for x in 0..9 {
+                    let is_border = matches!(
+                        (x, y),
+                        (3, 1) | (4, 1) | (5, 1)
+                        | (2, 2) | (6, 2)
+                        | (1, 3) | (7, 3)
+                        | (1, 4) | (7, 4)
+                        | (2, 5) | (6, 5)
+                        | (3, 6) | (5, 6)
+                        | (3, 7) | (4, 7)
+                    );
+                    if is_border {
+                        img.put_pixel(x, y, Rgba([40, 25, 15, 255]));
+                    }
+                }
+            }
+            img
+        });
+
+        let food_full = food_full_img.unwrap_or_else(|| {
+            let mut img = RgbaImage::new(9, 9);
+            for y in 0..9 {
+                for x in 0..9 {
+                    let is_body = match y {
+                        2 => x >= 3 && x <= 5,
+                        3..=4 => x >= 2 && x <= 6,
+                        5 => x >= 3 && x <= 5,
+                        6 => x == 4,
+                        _ => false,
+                    };
+                    let is_bone = (x == 4 && y == 7) || (x == 3 && y == 8) || (x == 5 && y == 8);
+                    if is_body {
+                        img.put_pixel(x, y, Rgba([185, 105, 45, 255]));
+                    } else if is_bone {
+                        img.put_pixel(x, y, Rgba([220, 215, 195, 255]));
+                    }
+                }
+            }
+            img
+        });
+
+        let food_half = food_half_img.unwrap_or_else(|| {
+            let mut img = RgbaImage::new(9, 9);
+            for y in 0..9 {
+                for x in 0..9 {
+                    let is_body_half = match y {
+                        2 => x >= 4 && x <= 5,
+                        3..=4 => x >= 4 && x <= 6,
+                        5 => x >= 4 && x <= 5,
+                        6 => x == 4,
+                        _ => false,
+                    };
+                    let is_bone = (x == 4 && y == 7) || (x == 5 && y == 8);
+                    if is_body_half {
+                        img.put_pixel(x, y, Rgba([185, 105, 45, 255]));
+                    } else if is_bone {
+                        img.put_pixel(x, y, Rgba([220, 215, 195, 255]));
+                    }
+                }
+            }
+            img
+        });
+
         // Stitch into 512x512 atlas:
         // Hotbar at (0, 0) -> 182 x 22
         // Selection at (0, 30) -> 24 x 24
         // Crosshair at (30, 30) -> 15 x 15
         // White solid at (60, 30) -> 16 x 16
+        // Heart container at (80, 30) -> 9 x 9
+        // Heart full at (92, 30) -> 9 x 9
+        // Heart half at (104, 30) -> 9 x 9
+        // Food empty at (116, 30) -> 9 x 9
+        // Food full at (128, 30) -> 9 x 9
+        // Food half at (140, 30) -> 9 x 9
         // Inventory container at (0, 60) -> 176 x 166
         let size = Self::ATLAS_SIZE;
         let mut atlas_image = RgbaImage::new(size, size);
@@ -285,6 +491,96 @@ impl GuiAtlas {
             v_max: (white_y_off + 16) as f32 / size as f32,
         };
 
+        // Paste heart container (9x9) at (80, 30)
+        let hc_x_off = 80;
+        let hc_y_off = 30;
+        for y in 0..heart_container.height() {
+            for x in 0..heart_container.width() {
+                atlas_image.put_pixel(hc_x_off + x, hc_y_off + y, *heart_container.get_pixel(x, y));
+            }
+        }
+        let heart_container_uv = GuiRect {
+            u_min: hc_x_off as f32 / size as f32,
+            v_min: hc_y_off as f32 / size as f32,
+            u_max: (hc_x_off + heart_container.width()) as f32 / size as f32,
+            v_max: (hc_y_off + heart_container.height()) as f32 / size as f32,
+        };
+
+        // Paste heart full (9x9) at (92, 30)
+        let hf_x_off = 92;
+        let hf_y_off = 30;
+        for y in 0..heart_full.height() {
+            for x in 0..heart_full.width() {
+                atlas_image.put_pixel(hf_x_off + x, hf_y_off + y, *heart_full.get_pixel(x, y));
+            }
+        }
+        let heart_full_uv = GuiRect {
+            u_min: hf_x_off as f32 / size as f32,
+            v_min: hf_y_off as f32 / size as f32,
+            u_max: (hf_x_off + heart_full.width()) as f32 / size as f32,
+            v_max: (hf_y_off + heart_full.height()) as f32 / size as f32,
+        };
+
+        // Paste heart half (9x9) at (104, 30)
+        let hh_x_off = 104;
+        let hh_y_off = 30;
+        for y in 0..heart_half.height() {
+            for x in 0..heart_half.width() {
+                atlas_image.put_pixel(hh_x_off + x, hh_y_off + y, *heart_half.get_pixel(x, y));
+            }
+        }
+        let heart_half_uv = GuiRect {
+            u_min: hh_x_off as f32 / size as f32,
+            v_min: hh_y_off as f32 / size as f32,
+            u_max: (hh_x_off + heart_half.width()) as f32 / size as f32,
+            v_max: (hh_y_off + heart_half.height()) as f32 / size as f32,
+        };
+
+        // Paste food empty (9x9) at (116, 30)
+        let fe_x_off = 116;
+        let fe_y_off = 30;
+        for y in 0..food_empty.height() {
+            for x in 0..food_empty.width() {
+                atlas_image.put_pixel(fe_x_off + x, fe_y_off + y, *food_empty.get_pixel(x, y));
+            }
+        }
+        let food_empty_uv = GuiRect {
+            u_min: fe_x_off as f32 / size as f32,
+            v_min: fe_y_off as f32 / size as f32,
+            u_max: (fe_x_off + food_empty.width()) as f32 / size as f32,
+            v_max: (fe_y_off + food_empty.height()) as f32 / size as f32,
+        };
+
+        // Paste food full (9x9) at (128, 30)
+        let ff_x_off = 128;
+        let ff_y_off = 30;
+        for y in 0..food_full.height() {
+            for x in 0..food_full.width() {
+                atlas_image.put_pixel(ff_x_off + x, ff_y_off + y, *food_full.get_pixel(x, y));
+            }
+        }
+        let food_full_uv = GuiRect {
+            u_min: ff_x_off as f32 / size as f32,
+            v_min: ff_y_off as f32 / size as f32,
+            u_max: (ff_x_off + food_full.width()) as f32 / size as f32,
+            v_max: (ff_y_off + food_full.height()) as f32 / size as f32,
+        };
+
+        // Paste food half (9x9) at (140, 30)
+        let fh_x_off = 140;
+        let fh_y_off = 30;
+        for y in 0..food_half.height() {
+            for x in 0..food_half.width() {
+                atlas_image.put_pixel(fh_x_off + x, fh_y_off + y, *food_half.get_pixel(x, y));
+            }
+        }
+        let food_half_uv = GuiRect {
+            u_min: fh_x_off as f32 / size as f32,
+            v_min: fh_y_off as f32 / size as f32,
+            u_max: (fh_x_off + food_half.width()) as f32 / size as f32,
+            v_max: (fh_y_off + food_half.height()) as f32 / size as f32,
+        };
+
         // Paste inventory container (176x166) at (0, 60)
         let inv_y_off = 60;
         for y in 0..inventory_bg.height().min(size - inv_y_off) {
@@ -308,6 +604,12 @@ impl GuiAtlas {
             crosshair_uv,
             inventory_uv,
             white_uv,
+            heart_container_uv,
+            heart_full_uv,
+            heart_half_uv,
+            food_empty_uv,
+            food_full_uv,
+            food_half_uv,
         }
     }
 }
@@ -616,6 +918,7 @@ impl GuiRenderer {
         screen_height: u32,
         active_slot: usize,
         inventory_gui: Option<(&InventoryGui, &PlayerInventory)>,
+        player_stats: Option<&crate::game::stats::PlayerStats>,
     ) {
         if screen_width == 0 || screen_height == 0 {
             return;
@@ -693,6 +996,20 @@ impl GuiRenderer {
                 self.atlas.selection_uv,
                 [1.0, 1.0, 1.0, 1.0],
             );
+
+            // 2.5 Vitals Quads (Hearts & Hunger Drumsticks)
+            if let Some(stats) = player_stats {
+                HudRenderer::build_vitals_quads(
+                    stats,
+                    &self.atlas,
+                    hotbar_x,
+                    hotbar_y,
+                    hotbar_w,
+                    scale,
+                    &mut normal_vertices,
+                    &mut normal_indices,
+                );
+            }
 
             // 3. Crosshair Quad (Vanilla: 15x15, exact screen center)
             let cross_w = 15.0 * scale;

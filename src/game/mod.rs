@@ -2,7 +2,11 @@ pub mod inventory;
 pub mod mining;
 pub mod physics;
 pub mod raycast;
+pub mod stats;
 pub mod world;
+
+#[allow(unused_imports)]
+pub use stats::PlayerStats;
 
 #[allow(unused_imports)]
 pub use inventory::{

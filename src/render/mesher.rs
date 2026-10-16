@@ -86,6 +86,11 @@ pub trait BlockReader: Send + Sync {
     fn get_light_at(&self, _x: i32, _y: i32, _z: i32) -> u8 {
         15
     }
+
+    /// Read fluid level (1..=8) if fluid is present at this voxel coordinate
+    fn get_fluid_level(&self, _x: i32, _y: i32, _z: i32) -> Option<u8> {
+        None
+    }
 }
 
 /// 16x16x16 Chunk Section representing a single sub-chunk in Minecraft 1.20.4
@@ -542,7 +547,145 @@ pub fn greedy_mesh_section(
         }
     }
 
+    // 2. Custom Fluid Pass: generate translucent/transparent quad faces
+    // with non-full block heights proportional to fluid level (h = level / 8.0)
+    for y in 0..SECTION_SIZE {
+        for z in 0..SECTION_SIZE {
+            for x in 0..SECTION_SIZE {
+                let block = section.get_block(x, y, z);
+                if block.is_fluid() {
+                    mesh_fluid_voxel(x, y, z, block, world_offset, reader, atlas, &mut mesh);
+                }
+            }
+        }
+    }
+
     mesh
+}
+
+/// Generates custom proportional transparent/translucent quad faces for a fluid voxel
+fn mesh_fluid_voxel(
+    x: usize,
+    y: usize,
+    z: usize,
+    block: BlockType,
+    world_offset: IVec3,
+    reader: &dyn BlockReader,
+    atlas: &TextureAtlas,
+    mesh: &mut ChunkMesh,
+) {
+    let wx = world_offset.x + x as i32;
+    let wy = world_offset.y + y as i32;
+    let wz = world_offset.z + z as i32;
+
+    let fx = wx as f32;
+    let fy = wy as f32;
+    let fz = wz as f32;
+
+    let level = reader.get_fluid_level(wx, wy, wz).unwrap_or(8);
+    let h = (level as f32 / 8.0).clamp(0.125, 1.0);
+
+    let light = reader.get_light_at(wx, wy, wz);
+
+    // 1. Top Face (Direction::Up)
+    let above = reader.get_block_at(wx, wy + 1, wz);
+    if above != block {
+        let normal_idx = 0; // Up
+        let uv = atlas.get_face_uv(block, Direction::Up);
+        let shade = compute_shaded_ao(3, reader.get_light_at(wx, wy + 1, wz).max(light));
+        let base = mesh.vertices.len() as u32;
+
+        mesh.vertices.push(BlockVertex::new([fx, fy + h, fz + 1.0], normal_idx, [uv[0], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy + h, fz + 1.0], normal_idx, [uv[2], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy + h, fz], normal_idx, [uv[2], uv[1]], shade));
+        mesh.vertices.push(BlockVertex::new([fx, fy + h, fz], normal_idx, [uv[0], uv[1]], shade));
+
+        mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+
+    // 2. Bottom Face (Direction::Down)
+    let below = reader.get_block_at(wx, wy - 1, wz);
+    if !below.is_opaque() && below != block {
+        let normal_idx = 1; // Down
+        let uv = atlas.get_face_uv(block, Direction::Down);
+        let shade = compute_shaded_ao(3, reader.get_light_at(wx, wy - 1, wz).max(light)) * 0.5;
+        let base = mesh.vertices.len() as u32;
+
+        mesh.vertices.push(BlockVertex::new([fx, fy, fz], normal_idx, [uv[0], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy, fz], normal_idx, [uv[2], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy, fz + 1.0], normal_idx, [uv[2], uv[1]], shade));
+        mesh.vertices.push(BlockVertex::new([fx, fy, fz + 1.0], normal_idx, [uv[0], uv[1]], shade));
+
+        mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+
+    // 3. North Face (Direction::North, -Z)
+    let north = reader.get_block_at(wx, wy, wz - 1);
+    if !north.is_opaque() && north != block {
+        let normal_idx = 2; // North
+        let uv = atlas.get_face_uv(block, Direction::North);
+        let shade = compute_shaded_ao(3, reader.get_light_at(wx, wy, wz - 1).max(light)) * 0.8;
+        let base = mesh.vertices.len() as u32;
+        let v_top = uv[3] - (uv[3] - uv[1]) * h;
+
+        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy, fz], normal_idx, [uv[2], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new([fx, fy, fz], normal_idx, [uv[0], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new([fx, fy + h, fz], normal_idx, [uv[0], v_top], shade));
+        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy + h, fz], normal_idx, [uv[2], v_top], shade));
+
+        mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+
+    // 4. South Face (Direction::South, +Z)
+    let south = reader.get_block_at(wx, wy, wz + 1);
+    if !south.is_opaque() && south != block {
+        let normal_idx = 3; // South
+        let uv = atlas.get_face_uv(block, Direction::South);
+        let shade = compute_shaded_ao(3, reader.get_light_at(wx, wy, wz + 1).max(light)) * 0.8;
+        let base = mesh.vertices.len() as u32;
+        let v_top = uv[3] - (uv[3] - uv[1]) * h;
+
+        mesh.vertices.push(BlockVertex::new([fx, fy, fz + 1.0], normal_idx, [uv[0], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy, fz + 1.0], normal_idx, [uv[2], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy + h, fz + 1.0], normal_idx, [uv[2], v_top], shade));
+        mesh.vertices.push(BlockVertex::new([fx, fy + h, fz + 1.0], normal_idx, [uv[0], v_top], shade));
+
+        mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+
+    // 5. West Face (Direction::West, -X)
+    let west = reader.get_block_at(wx - 1, wy, wz);
+    if !west.is_opaque() && west != block {
+        let normal_idx = 4; // West
+        let uv = atlas.get_face_uv(block, Direction::West);
+        let shade = compute_shaded_ao(3, reader.get_light_at(wx - 1, wy, wz).max(light)) * 0.6;
+        let base = mesh.vertices.len() as u32;
+        let v_top = uv[3] - (uv[3] - uv[1]) * h;
+
+        mesh.vertices.push(BlockVertex::new([fx, fy, fz], normal_idx, [uv[0], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new([fx, fy, fz + 1.0], normal_idx, [uv[2], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new([fx, fy + h, fz + 1.0], normal_idx, [uv[2], v_top], shade));
+        mesh.vertices.push(BlockVertex::new([fx, fy + h, fz], normal_idx, [uv[0], v_top], shade));
+
+        mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+
+    // 6. East Face (Direction::East, +X)
+    let east = reader.get_block_at(wx + 1, wy, wz);
+    if !east.is_opaque() && east != block {
+        let normal_idx = 5; // East
+        let uv = atlas.get_face_uv(block, Direction::East);
+        let shade = compute_shaded_ao(3, reader.get_light_at(wx + 1, wy, wz).max(light)) * 0.6;
+        let base = mesh.vertices.len() as u32;
+        let v_top = uv[3] - (uv[3] - uv[1]) * h;
+
+        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy, fz + 1.0], normal_idx, [uv[2], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy, fz], normal_idx, [uv[0], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy + h, fz], normal_idx, [uv[0], v_top], shade));
+        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy + h, fz + 1.0], normal_idx, [uv[2], v_top], shade));
+
+        mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
 }
 
 /// Mesh multiple chunk sections in parallel using Rayon thread pool

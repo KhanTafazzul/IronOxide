@@ -261,6 +261,7 @@ pub fn block_to_vanilla_name(block: BlockType) -> &'static str {
         BlockType::Torch => "minecraft:torch",
         BlockType::Lava => "minecraft:lava",
         BlockType::Water => "minecraft:water",
+        BlockType::Obsidian => "minecraft:obsidian",
     }
 }
 
@@ -281,6 +282,7 @@ pub fn vanilla_name_to_block(name: &str) -> BlockType {
         "minecraft:torch" => BlockType::Torch,
         "minecraft:lava" => BlockType::Lava,
         "minecraft:water" => BlockType::Water,
+        "minecraft:obsidian" => BlockType::Obsidian,
         _ => BlockType::Air,
     }
 }

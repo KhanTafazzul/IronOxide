@@ -55,6 +55,7 @@ pub enum BlockType {
     Torch,
     Lava,
     Water,
+    Obsidian,
 }
 
 impl BlockType {
@@ -64,9 +65,14 @@ impl BlockType {
             | BlockType::Glass
             | BlockType::OakLeaves
             | BlockType::Water
+            | BlockType::Lava
             | BlockType::Torch => false,
             _ => true,
         }
+    }
+
+    pub fn is_fluid(&self) -> bool {
+        matches!(self, BlockType::Water | BlockType::Lava)
     }
 
     pub fn is_air(&self) -> bool {
@@ -178,6 +184,7 @@ impl TextureAtlas {
                         "sand",
                         "glass",
                         "bricks",
+                        "obsidian",
                         "destroy_stage_0",
                         "destroy_stage_1",
                         "destroy_stage_2",
@@ -214,7 +221,7 @@ impl TextureAtlas {
 
     /// Provides fallback 16x16 textures if texture is missing or jar cannot be opened
     fn ensure_fallbacks(sprites: &mut HashMap<String, RgbaImage>) {
-        let palette: [(&str, [u8; 4]); 19] = [
+        let palette: [(&str, [u8; 4]); 20] = [
             ("grass_block_top", [86, 175, 49, 255]),
             ("grass_block_side", [106, 140, 60, 255]),
             ("dirt", [134, 96, 67, 255]),
@@ -230,6 +237,7 @@ impl TextureAtlas {
             ("sand", [219, 207, 154, 255]),
             ("glass", [200, 220, 255, 120]),
             ("bricks", [150, 67, 50, 255]),
+            ("obsidian", [20, 18, 30, 255]),
             ("torch", [255, 210, 40, 255]),
             ("lava", [240, 110, 20, 255]),
             ("water", [40, 80, 220, 180]),
@@ -380,6 +388,7 @@ impl TextureAtlas {
             BlockType::Torch => "torch",
             BlockType::Lava => "lava",
             BlockType::Water => "water",
+            BlockType::Obsidian => "obsidian",
         };
 
         self.get_sprite(sprite_name).to_array()

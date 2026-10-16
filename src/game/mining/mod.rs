@@ -26,6 +26,7 @@ pub fn get_block_hardness(block: BlockType) -> f32 {
         BlockType::Glass => 0.3,
         BlockType::Torch => 0.0,
         BlockType::Lava | BlockType::Water => -1.0,
+        BlockType::Obsidian => 50.0,
     }
 }
 

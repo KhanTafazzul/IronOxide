@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use glam::IVec3;
 use crate::render::atlas::BlockType;
 use crate::render::mesher::{BlockReader, ChunkSection, SECTION_SIZE};
+use crate::world::fluids::{FluidEngine, FluidState, FluidType, FluidWorldAccess};
 use crate::world::lighting::LightEngine;
 
 /// Multi-section voxel world implementing global BlockReader and LightEngine
@@ -13,6 +14,7 @@ use crate::world::lighting::LightEngine;
 pub struct World {
     pub sections: HashMap<IVec3, ChunkSection>,
     pub lighting: LightEngine,
+    pub fluids: FluidEngine,
 }
 
 impl Default for World {
@@ -26,7 +28,16 @@ impl World {
         Self {
             sections: HashMap::new(),
             lighting: LightEngine::new(),
+            fluids: FluidEngine::new(),
         }
+    }
+
+    /// Ticks cellular automaton fluid simulation and returns affected section coordinates
+    pub fn tick_fluids(&mut self) -> Vec<IVec3> {
+        let mut fluids = std::mem::take(&mut self.fluids);
+        let affected = fluids.tick(self);
+        self.fluids = fluids;
+        affected
     }
 
     /// Retrieve or create section at section grid coordinate
@@ -81,6 +92,14 @@ impl World {
             affected.push(IVec3::new(sec_x, sec_y, sec_z + 1));
         }
 
+        // Fluid engine state tracking
+        if let Some(ft) = FluidType::from_block(block) {
+            self.fluids.set_fluid_state(world_pos, FluidState::new_source(ft));
+            self.fluids.schedule_update(world_pos);
+        } else if old_block.is_fluid() && !block.is_fluid() {
+            self.fluids.remove_fluid_state(world_pos);
+        }
+
         // Lighting BFS updates
         let mut light_affected = if block.is_air() && !old_block.is_air() {
             self.lighting.on_block_broken(world_pos, old_block, &self.sections)
@@ -94,6 +113,12 @@ impl World {
         affected.sort_by_key(|p| (p.x, p.y, p.z));
         affected.dedup();
         affected
+    }
+}
+
+impl FluidWorldAccess for World {
+    fn set_block_at(&mut self, pos: IVec3, block: BlockType) -> Vec<IVec3> {
+        self.set_block_at(pos, block)
     }
 }
 
@@ -123,6 +148,21 @@ impl BlockReader for World {
     #[inline]
     fn get_light_at(&self, x: i32, y: i32, z: i32) -> u8 {
         self.lighting.get_combined_light(IVec3::new(x, y, z))
+    }
+
+    #[inline]
+    fn get_fluid_level(&self, x: i32, y: i32, z: i32) -> Option<u8> {
+        let pos = IVec3::new(x, y, z);
+        if let Some(state) = self.fluids.get_fluid_state(pos) {
+            Some(state.level)
+        } else {
+            let b = self.get_block_at(x, y, z);
+            if b.is_fluid() {
+                Some(8)
+            } else {
+                None
+            }
+        }
     }
 }
 

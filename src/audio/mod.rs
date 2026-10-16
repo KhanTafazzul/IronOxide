@@ -89,7 +89,7 @@ impl SoundType {
         match block {
             BlockType::Air => Self::STONE,
             BlockType::GrassBlock | BlockType::Dirt => Self::GRASS,
-            BlockType::Stone | BlockType::Cobblestone | BlockType::Deepslate | BlockType::Bricks | BlockType::Bedrock => {
+            BlockType::Stone | BlockType::Cobblestone | BlockType::Deepslate | BlockType::Bricks | BlockType::Bedrock | BlockType::Obsidian => {
                 Self::STONE
             }
             BlockType::OakLog | BlockType::OakPlanks => Self::WOOD,

@@ -229,6 +229,16 @@ impl<'a> GameApp<'a> {
             self.stats.on_jump(input.sprint);
         }
 
+        let player_block = glam::IVec3::new(
+            self.player.position.x.floor() as i32,
+            self.player.position.y.floor() as i32,
+            self.player.position.z.floor() as i32,
+        );
+        if self.world.get_block(player_block) == BlockType::Water {
+            let flow = self.world.fluids.get_flow_direction(player_block, &self.world);
+            self.player.velocity += flow * 0.014;
+        }
+
         self.player.tick(&input, &self.world);
         self.camera.eye = self.player.eye_position();
 
@@ -506,6 +516,13 @@ impl<'a> ApplicationHandler for GameApp<'a> {
 
                 self.update_physics(dt);
                 self.stats.update(dt);
+
+                // Tick cellular automaton fluid simulation
+                let fluid_affected = self.world.tick_fluids();
+                if !fluid_affected.is_empty() {
+                    self.remesh_sections(&fluid_affected);
+                    self.storage.mark_sections_dirty(&fluid_affected);
+                }
 
                 // REA Verified: Mining progress tracking & block break resolution
                 let raycast_hit = if self.inventory_gui.is_open || !self.mouse_captured {

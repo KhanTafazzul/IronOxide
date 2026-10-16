@@ -94,7 +94,7 @@ impl SoundType {
             }
             BlockType::OakLog | BlockType::OakPlanks => Self::WOOD,
             BlockType::Sand => Self::GRAVEL,
-            BlockType::OakLeaves => Self {
+            BlockType::OakLeaves | BlockType::Vine => Self {
                 volume: 0.8,
                 pitch: 1.2,
                 break_sound: SoundEvent::GrassBreak,

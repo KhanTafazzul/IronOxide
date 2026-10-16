@@ -1,5 +1,6 @@
 pub mod atlas;
 pub mod camera;
+pub mod colormap;
 pub mod context;
 pub mod culling;
 pub mod dynamic_lights;
@@ -10,6 +11,7 @@ pub mod mesher;
 pub mod models;
 pub mod uniforms;
 
+pub use colormap::{climate_to_uv, get_default_colormaps, Biome, BiomeColormaps};
 pub use camera::{Camera, CameraMode};
 pub use culling::{Frustum, FrustumPlane};
 pub use dynamic_lights::{calculate_dynamic_light, DynamicLightPipeline, DynamicLightUniform};

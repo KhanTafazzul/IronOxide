@@ -22,7 +22,7 @@ pub fn get_block_hardness(block: BlockType) -> f32 {
         BlockType::Cobblestone | BlockType::Bricks => 2.0,
         BlockType::OakLog | BlockType::OakPlanks => 2.0,
         BlockType::Deepslate => 3.0,
-        BlockType::OakLeaves => 0.2,
+        BlockType::OakLeaves | BlockType::Vine => 0.2,
         BlockType::Glass => 0.3,
         BlockType::Torch => 0.0,
         BlockType::Lava | BlockType::Water => -1.0,

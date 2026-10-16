@@ -128,6 +128,7 @@ struct VertexInput {
     @location(1) normal_idx: u32,
     @location(2) uv: vec2<f32>,
     @location(3) ao: f32,
+    @location(4) color: vec3<f32>,
 };
 
 struct VertexOutput {
@@ -136,6 +137,7 @@ struct VertexOutput {
     @location(1) uv: vec2<f32>,
     @location(2) @interpolate(flat) normal_idx: u32,
     @location(3) vertex_light: f32,
+    @location(4) color: vec3<f32>,
 };
 
 @vertex
@@ -147,6 +149,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.normal_idx = in.normal_idx;
     // in.ao scale is 0.0..3.0 (with 3.0 being full vertex brightness)
     out.vertex_light = clamp(in.ao / 3.0, 0.0, 1.0);
+    out.color = in.color;
     return out;
 }
 
@@ -188,7 +191,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Apply minimum ambient floor (0.05) so unlit areas are not pitch black
     let illumination = max(0.05, final_light) * dir_shade;
 
-    return vec4<f32>(tex_color.rgb * illumination, tex_color.a);
+    let tinted_color = tex_color.rgb * in.color;
+    return vec4<f32>(tinted_color * illumination, tex_color.a);
 }
 "#;
 

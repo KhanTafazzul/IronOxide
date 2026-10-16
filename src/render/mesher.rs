@@ -12,12 +12,13 @@ use glam::IVec3;
 use rayon::prelude::*;
 
 use crate::render::atlas::{BlockType, Direction, TextureAtlas};
+use crate::render::colormap::{get_default_colormaps, BiomeColormaps};
 
 pub const SECTION_SIZE: usize = 16;
 pub const SECTION_VOLUME: usize = SECTION_SIZE * SECTION_SIZE * SECTION_SIZE; // 4096
 
-/// Interleaved block vertex buffer representation: [x, y, z, normal_index, u, v, ao_value]
-/// Guaranteed 4-byte alignment and 28-byte stride.
+/// Interleaved block vertex buffer representation: [x, y, z, normal_index, u, v, ao_value, r, g, b]
+/// Guaranteed 4-byte alignment and 40-byte stride.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, Pod, Zeroable)]
 pub struct BlockVertex {
@@ -28,10 +29,13 @@ pub struct BlockVertex {
     pub u: f32,
     pub v: f32,
     pub ao: f32, // Ambient occlusion value: 0.0 (darkest), 1.0, 2.0, 3.0 (brightest)
+    pub r: f32,  // Biome tint multiplier R (0.0 to 1.0)
+    pub g: f32,  // Biome tint multiplier G (0.0 to 1.0)
+    pub b: f32,  // Biome tint multiplier B (0.0 to 1.0)
 }
 
 impl BlockVertex {
-    pub fn new(pos: [f32; 3], normal_idx: u32, uv: [f32; 2], ao: f32) -> Self {
+    pub fn new(pos: [f32; 3], normal_idx: u32, uv: [f32; 2], ao: f32, color: [f32; 3]) -> Self {
         Self {
             x: pos[0],
             y: pos[1],
@@ -40,7 +44,14 @@ impl BlockVertex {
             u: uv[0],
             v: uv[1],
             ao,
+            r: color[0],
+            g: color[1],
+            b: color[2],
         }
+    }
+
+    pub fn new_untinted(pos: [f32; 3], normal_idx: u32, uv: [f32; 2], ao: f32) -> Self {
+        Self::new(pos, normal_idx, uv, ao, [1.0, 1.0, 1.0])
     }
 
     /// WGPU Vertex Buffer Layout descriptor for standard pipeline binding
@@ -49,29 +60,35 @@ impl BlockVertex {
             array_stride: std::mem::size_of::<BlockVertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
-                // x, y, z: Float32x3
+                // x, y, z: Float32x3 (offset 0)
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 0,
                     format: wgpu::VertexFormat::Float32x3,
                 },
-                // normal_index: Uint32
+                // normal_index: Uint32 (offset 12)
                 wgpu::VertexAttribute {
                     offset: 12,
                     shader_location: 1,
                     format: wgpu::VertexFormat::Uint32,
                 },
-                // u, v: Float32x2
+                // u, v: Float32x2 (offset 16)
                 wgpu::VertexAttribute {
                     offset: 16,
                     shader_location: 2,
                     format: wgpu::VertexFormat::Float32x2,
                 },
-                // ao_value: Float32
+                // ao_value: Float32 (offset 24)
                 wgpu::VertexAttribute {
                     offset: 24,
                     shader_location: 3,
                     format: wgpu::VertexFormat::Float32,
+                },
+                // color r, g, b: Float32x3 (offset 28)
+                wgpu::VertexAttribute {
+                    offset: 28,
+                    shader_location: 4,
+                    format: wgpu::VertexFormat::Float32x3,
                 },
             ],
         }
@@ -90,6 +107,12 @@ pub trait BlockReader: Send + Sync {
     /// Read fluid level (1..=8) if fluid is present at this voxel coordinate
     fn get_fluid_level(&self, _x: i32, _y: i32, _z: i32) -> Option<u8> {
         None
+    }
+
+    /// Read biome climate (temperature, downfall/humidity) for colormap sampling.
+    /// Defaults to Plains climate (0.8, 0.4).
+    fn get_biome_climate(&self, _x: i32, _z: i32) -> (f32, f32) {
+        (0.8, 0.4)
     }
 }
 
@@ -294,21 +317,51 @@ pub fn compute_shaded_ao(ao: u8, light: u8) -> f32 {
 }
 
 /// Internal cell representation on a 2D slice during greedy sweep
+/// Internal cell representation on a 2D slice during greedy sweep
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct FaceInfo {
     block: BlockType,
     direction: Direction,
     ao: [u8; 4], // [AO_bottom_left, AO_bottom_right, AO_top_right, AO_top_left]
     light: [u8; 4], // [Light_bottom_left, Light_bottom_right, Light_top_right, Light_top_left]
+    tint: [u8; 3], // Quantized RGB tint multiplier for exact greedy face equality comparison
 }
 
-/// 3D Greedy Meshing Algorithm
-/// Iterates across each axis (X, Y, Z), culls hidden faces, merges coplanar adjacent faces,
-/// and computes Ambient Occlusion per vertex.
+/// Determines if `from` block should render an exterior face against `to` block
+#[inline]
+pub fn face_is_visible(from: BlockType, to: BlockType) -> bool {
+    if from.is_air() || from.is_fluid() {
+        return false;
+    }
+    if to.is_air() || to.is_fluid() {
+        return true;
+    }
+    if from == to {
+        return false;
+    }
+    if !to.is_opaque() {
+        return true;
+    }
+    false
+}
+
+/// 3D Greedy Meshing Algorithm with default global colormaps
 pub fn greedy_mesh_section(
     section: &ChunkSection,
     atlas: &TextureAtlas,
     reader: &dyn BlockReader,
+) -> ChunkMesh {
+    greedy_mesh_section_with_colormaps(section, atlas, reader, get_default_colormaps())
+}
+
+/// 3D Greedy Meshing Algorithm with custom BiomeColormaps
+/// Iterates across each axis (X, Y, Z), culls hidden faces, merges coplanar adjacent faces,
+/// computes Ambient Occlusion per vertex, and applies 3x3 smoothed biome tinting.
+pub fn greedy_mesh_section_with_colormaps(
+    section: &ChunkSection,
+    atlas: &TextureAtlas,
+    reader: &dyn BlockReader,
+    colormaps: &BiomeColormaps,
 ) -> ChunkMesh {
     let mut mesh = ChunkMesh::default();
     let world_offset = section.position * (SECTION_SIZE as i32);
@@ -344,13 +397,13 @@ pub fn greedy_mesh_section(
                     let block_a = reader.get_block_at(pos_a[0], pos_a[1], pos_a[2]);
                     let block_b = reader.get_block_at(pos_b[0], pos_b[1], pos_b[2]);
 
-                    let opaque_a = block_a.is_opaque();
-                    let opaque_b = block_b.is_opaque();
+                    let vis_a = face_is_visible(block_a, block_b);
+                    let vis_b = face_is_visible(block_b, block_a);
 
                     let mask_idx = (slice_u as usize) * SECTION_SIZE + (slice_v as usize);
 
-                    if opaque_a != opaque_b {
-                        let (block, dir, face_block_pos) = if opaque_a {
+                    if vis_a || vis_b {
+                        let (block, dir, face_block_pos) = if vis_a {
                             let dir = match d {
                                 0 => Direction::East,
                                 1 => Direction::Up,
@@ -389,17 +442,43 @@ pub fn greedy_mesh_section(
                         let light2 = calculate_vertex_light(reader, face_block_pos, normal, u_dir, v_dir);
                         let light3 = calculate_vertex_light(reader, face_block_pos, normal, neg_u, v_dir);
 
+                        // Biome tint calculation:
+                        // - Grass Blocks (Direction::Up)
+                        // - Oak Leaves (all faces)
+                        // - Vines (all faces)
+                        let wx = world_offset.x + face_block_pos[0];
+                        let wz = world_offset.z + face_block_pos[2];
+
+                        let tint = if block == BlockType::GrassBlock && dir == Direction::Up {
+                            let rgb = colormaps.get_smoothed_grass_color(reader, wx, wz);
+                            [
+                                (rgb[0] * 255.0).clamp(0.0, 255.0) as u8,
+                                (rgb[1] * 255.0).clamp(0.0, 255.0) as u8,
+                                (rgb[2] * 255.0).clamp(0.0, 255.0) as u8,
+                            ]
+                        } else if block == BlockType::OakLeaves || block == BlockType::Vine {
+                            let rgb = colormaps.get_smoothed_foliage_color(reader, wx, wz);
+                            [
+                                (rgb[0] * 255.0).clamp(0.0, 255.0) as u8,
+                                (rgb[1] * 255.0).clamp(0.0, 255.0) as u8,
+                                (rgb[2] * 255.0).clamp(0.0, 255.0) as u8,
+                            ]
+                        } else {
+                            [255, 255, 255]
+                        };
+
                         mask[mask_idx] = Some(FaceInfo {
                             block,
                             direction: dir,
                             ao: [ao0, ao1, ao2, ao3],
                             light: [light0, light1, light2, light3],
+                            tint,
                         });
                     }
                 }
             }
 
-            // Greedy merge coplanar adjacent faces with identical textures and AO
+            // Greedy merge coplanar adjacent faces with identical textures, AO, and tint
             for slice_u in 0..SECTION_SIZE {
                 let mut slice_v = 0;
                 while slice_v < SECTION_SIZE {
@@ -497,6 +576,12 @@ pub fn greedy_mesh_section(
                         let shade2 = compute_shaded_ao(current_face.ao[2], current_face.light[2]);
                         let shade3 = compute_shaded_ao(current_face.ao[3], current_face.light[3]);
 
+                        let vertex_tint = [
+                            current_face.tint[0] as f32 / 255.0,
+                            current_face.tint[1] as f32 / 255.0,
+                            current_face.tint[2] as f32 / 255.0,
+                        ];
+
                         let base_vertex_idx = mesh.vertices.len() as u32;
 
                         // Ensure counter-clockwise winding when viewed from exterior
@@ -506,15 +591,15 @@ pub fn greedy_mesh_section(
                         );
 
                         if !is_back_face {
-                            mesh.vertices.push(BlockVertex::new(wp0, normal_idx, [u_min, v_min], shade0));
-                            mesh.vertices.push(BlockVertex::new(wp1, normal_idx, [u_max, v_min], shade1));
-                            mesh.vertices.push(BlockVertex::new(wp2, normal_idx, [u_max, v_max], shade2));
-                            mesh.vertices.push(BlockVertex::new(wp3, normal_idx, [u_min, v_max], shade3));
+                            mesh.vertices.push(BlockVertex::new(wp0, normal_idx, [u_min, v_min], shade0, vertex_tint));
+                            mesh.vertices.push(BlockVertex::new(wp1, normal_idx, [u_max, v_min], shade1, vertex_tint));
+                            mesh.vertices.push(BlockVertex::new(wp2, normal_idx, [u_max, v_max], shade2, vertex_tint));
+                            mesh.vertices.push(BlockVertex::new(wp3, normal_idx, [u_min, v_max], shade3, vertex_tint));
                         } else {
-                            mesh.vertices.push(BlockVertex::new(wp0, normal_idx, [u_min, v_min], shade0));
-                            mesh.vertices.push(BlockVertex::new(wp3, normal_idx, [u_min, v_max], shade3));
-                            mesh.vertices.push(BlockVertex::new(wp2, normal_idx, [u_max, v_max], shade2));
-                            mesh.vertices.push(BlockVertex::new(wp1, normal_idx, [u_max, v_min], shade1));
+                            mesh.vertices.push(BlockVertex::new(wp0, normal_idx, [u_min, v_min], shade0, vertex_tint));
+                            mesh.vertices.push(BlockVertex::new(wp3, normal_idx, [u_min, v_max], shade3, vertex_tint));
+                            mesh.vertices.push(BlockVertex::new(wp2, normal_idx, [u_max, v_max], shade2, vertex_tint));
+                            mesh.vertices.push(BlockVertex::new(wp1, normal_idx, [u_max, v_min], shade1, vertex_tint));
                         }
 
                         // Minecraft AO/lighting diagonal flip rule to prevent interpolation creases
@@ -595,10 +680,10 @@ fn mesh_fluid_voxel(
         let shade = compute_shaded_ao(3, reader.get_light_at(wx, wy + 1, wz).max(light));
         let base = mesh.vertices.len() as u32;
 
-        mesh.vertices.push(BlockVertex::new([fx, fy + h, fz + 1.0], normal_idx, [uv[0], uv[3]], shade));
-        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy + h, fz + 1.0], normal_idx, [uv[2], uv[3]], shade));
-        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy + h, fz], normal_idx, [uv[2], uv[1]], shade));
-        mesh.vertices.push(BlockVertex::new([fx, fy + h, fz], normal_idx, [uv[0], uv[1]], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx, fy + h, fz + 1.0], normal_idx, [uv[0], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx + 1.0, fy + h, fz + 1.0], normal_idx, [uv[2], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx + 1.0, fy + h, fz], normal_idx, [uv[2], uv[1]], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx, fy + h, fz], normal_idx, [uv[0], uv[1]], shade));
 
         mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
@@ -611,10 +696,10 @@ fn mesh_fluid_voxel(
         let shade = compute_shaded_ao(3, reader.get_light_at(wx, wy - 1, wz).max(light)) * 0.5;
         let base = mesh.vertices.len() as u32;
 
-        mesh.vertices.push(BlockVertex::new([fx, fy, fz], normal_idx, [uv[0], uv[3]], shade));
-        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy, fz], normal_idx, [uv[2], uv[3]], shade));
-        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy, fz + 1.0], normal_idx, [uv[2], uv[1]], shade));
-        mesh.vertices.push(BlockVertex::new([fx, fy, fz + 1.0], normal_idx, [uv[0], uv[1]], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx, fy, fz], normal_idx, [uv[0], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx + 1.0, fy, fz], normal_idx, [uv[2], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx + 1.0, fy, fz + 1.0], normal_idx, [uv[2], uv[1]], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx, fy, fz + 1.0], normal_idx, [uv[0], uv[1]], shade));
 
         mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
@@ -628,10 +713,10 @@ fn mesh_fluid_voxel(
         let base = mesh.vertices.len() as u32;
         let v_top = uv[3] - (uv[3] - uv[1]) * h;
 
-        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy, fz], normal_idx, [uv[2], uv[3]], shade));
-        mesh.vertices.push(BlockVertex::new([fx, fy, fz], normal_idx, [uv[0], uv[3]], shade));
-        mesh.vertices.push(BlockVertex::new([fx, fy + h, fz], normal_idx, [uv[0], v_top], shade));
-        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy + h, fz], normal_idx, [uv[2], v_top], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx + 1.0, fy, fz], normal_idx, [uv[2], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx, fy, fz], normal_idx, [uv[0], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx, fy + h, fz], normal_idx, [uv[0], v_top], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx + 1.0, fy + h, fz], normal_idx, [uv[2], v_top], shade));
 
         mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
@@ -645,10 +730,10 @@ fn mesh_fluid_voxel(
         let base = mesh.vertices.len() as u32;
         let v_top = uv[3] - (uv[3] - uv[1]) * h;
 
-        mesh.vertices.push(BlockVertex::new([fx, fy, fz + 1.0], normal_idx, [uv[0], uv[3]], shade));
-        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy, fz + 1.0], normal_idx, [uv[2], uv[3]], shade));
-        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy + h, fz + 1.0], normal_idx, [uv[2], v_top], shade));
-        mesh.vertices.push(BlockVertex::new([fx, fy + h, fz + 1.0], normal_idx, [uv[0], v_top], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx, fy, fz + 1.0], normal_idx, [uv[0], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx + 1.0, fy, fz + 1.0], normal_idx, [uv[2], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx + 1.0, fy + h, fz + 1.0], normal_idx, [uv[2], v_top], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx, fy + h, fz + 1.0], normal_idx, [uv[0], v_top], shade));
 
         mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
@@ -662,10 +747,10 @@ fn mesh_fluid_voxel(
         let base = mesh.vertices.len() as u32;
         let v_top = uv[3] - (uv[3] - uv[1]) * h;
 
-        mesh.vertices.push(BlockVertex::new([fx, fy, fz], normal_idx, [uv[0], uv[3]], shade));
-        mesh.vertices.push(BlockVertex::new([fx, fy, fz + 1.0], normal_idx, [uv[2], uv[3]], shade));
-        mesh.vertices.push(BlockVertex::new([fx, fy + h, fz + 1.0], normal_idx, [uv[2], v_top], shade));
-        mesh.vertices.push(BlockVertex::new([fx, fy + h, fz], normal_idx, [uv[0], v_top], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx, fy, fz], normal_idx, [uv[0], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx, fy, fz + 1.0], normal_idx, [uv[2], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx, fy + h, fz + 1.0], normal_idx, [uv[2], v_top], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx, fy + h, fz], normal_idx, [uv[0], v_top], shade));
 
         mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
@@ -679,10 +764,10 @@ fn mesh_fluid_voxel(
         let base = mesh.vertices.len() as u32;
         let v_top = uv[3] - (uv[3] - uv[1]) * h;
 
-        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy, fz + 1.0], normal_idx, [uv[2], uv[3]], shade));
-        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy, fz], normal_idx, [uv[0], uv[3]], shade));
-        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy + h, fz], normal_idx, [uv[0], v_top], shade));
-        mesh.vertices.push(BlockVertex::new([fx + 1.0, fy + h, fz + 1.0], normal_idx, [uv[2], v_top], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx + 1.0, fy, fz + 1.0], normal_idx, [uv[2], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx + 1.0, fy, fz], normal_idx, [uv[0], uv[3]], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx + 1.0, fy + h, fz], normal_idx, [uv[0], v_top], shade));
+        mesh.vertices.push(BlockVertex::new_untinted([fx + 1.0, fy + h, fz + 1.0], normal_idx, [uv[2], v_top], shade));
 
         mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
@@ -743,10 +828,10 @@ mod tests {
 
     #[test]
     fn test_vertex_layout() {
-        assert_eq!(std::mem::size_of::<BlockVertex>(), 28);
+        assert_eq!(std::mem::size_of::<BlockVertex>(), 40);
         let desc = BlockVertex::desc();
-        assert_eq!(desc.array_stride, 28);
-        assert_eq!(desc.attributes.len(), 4);
+        assert_eq!(desc.array_stride, 40);
+        assert_eq!(desc.attributes.len(), 5);
     }
 
     #[test]
@@ -898,5 +983,77 @@ mod tests {
         let quad_x0 = top_quads.iter().find(|q| q.iter().any(|v| v.x == 0.0)).unwrap();
         let quad_x1 = top_quads.iter().find(|q| q.iter().any(|v| v.x == 2.0)).unwrap();
         assert!(quad_x0[0].ao > quad_x1[0].ao, "Bright face should have higher shade value than dim face");
+    }
+
+    #[test]
+    fn test_biome_tinting_grass_foliage_and_vines() {
+        struct BiomeReader {
+            blocks: std::collections::HashMap<IVec3, BlockType>,
+            climate: (f32, f32),
+        }
+        impl BlockReader for BiomeReader {
+            fn get_block_at(&self, x: i32, y: i32, z: i32) -> BlockType {
+                self.blocks.get(&IVec3::new(x, y, z)).copied().unwrap_or(BlockType::Air)
+            }
+            fn get_biome_climate(&self, _x: i32, _z: i32) -> (f32, f32) {
+                self.climate
+            }
+        }
+
+        let mut section = ChunkSection::new(IVec3::ZERO);
+        section.set_block(2, 2, 2, BlockType::GrassBlock);
+        section.set_block(4, 4, 4, BlockType::OakLeaves);
+        section.set_block(6, 6, 6, BlockType::Vine);
+        section.set_block(8, 8, 8, BlockType::Stone);
+
+        let mut reader = BiomeReader {
+            blocks: std::collections::HashMap::new(),
+            climate: (0.8, 0.4), // Plains
+        };
+        reader.blocks.insert(IVec3::new(2, 2, 2), BlockType::GrassBlock);
+        reader.blocks.insert(IVec3::new(4, 4, 4), BlockType::OakLeaves);
+        reader.blocks.insert(IVec3::new(6, 6, 6), BlockType::Vine);
+        reader.blocks.insert(IVec3::new(8, 8, 8), BlockType::Stone);
+
+        let atlas = TextureAtlas::load_or_create(None);
+        let mesh = greedy_mesh_section(&section, &atlas, &reader);
+
+        // Find Grass Block top vertices
+        let grass_top_verts: Vec<_> = mesh.vertices.iter().filter(|v| {
+            (v.y - 3.0).abs() < 1e-4 && (v.x >= 2.0 && v.x <= 3.0) && (v.z >= 2.0 && v.z <= 3.0)
+                && v.normal_idx == direction_to_normal_idx(Direction::Up)
+        }).collect();
+        assert_eq!(grass_top_verts.len(), 4);
+        // Grass top must have tinted green color (g > r and g > b, not 1.0 white)
+        let gv = grass_top_verts[0];
+        assert!(gv.g > gv.r && gv.g > gv.b, "Grass top must have green biome tint");
+        assert!(gv.r < 0.95 || gv.b < 0.95, "Grass top should not be untinted white");
+
+        // Find Oak Leaves vertices
+        let leaf_verts: Vec<_> = mesh.vertices.iter().filter(|v| {
+            (v.x >= 4.0 && v.x <= 5.0) && (v.y >= 4.0 && v.y <= 5.0) && (v.z >= 4.0 && v.z <= 5.0)
+        }).collect();
+        assert!(!leaf_verts.is_empty());
+        let lv = leaf_verts[0];
+        assert!(lv.g > lv.r && lv.g > lv.b, "Oak leaves must have foliage biome tint");
+
+        // Find Vine vertices
+        let vine_verts: Vec<_> = mesh.vertices.iter().filter(|v| {
+            (v.x >= 6.0 && v.x <= 7.0) && (v.y >= 6.0 && v.y <= 7.0) && (v.z >= 6.0 && v.z <= 7.0)
+        }).collect();
+        assert!(!vine_verts.is_empty());
+        let vv = vine_verts[0];
+        assert!(vv.g > vv.r && vv.g > vv.b, "Vines must have foliage biome tint");
+
+        // Stone vertices must remain untinted white [1.0, 1.0, 1.0]
+        let stone_verts: Vec<_> = mesh.vertices.iter().filter(|v| {
+            (v.x >= 8.0 && v.x <= 9.0) && (v.y >= 8.0 && v.y <= 9.0) && (v.z >= 8.0 && v.z <= 9.0)
+        }).collect();
+        assert!(!stone_verts.is_empty());
+        for sv in stone_verts {
+            assert!((sv.r - 1.0).abs() < 1e-4);
+            assert!((sv.g - 1.0).abs() < 1e-4);
+            assert!((sv.b - 1.0).abs() < 1e-4);
+        }
     }
 }

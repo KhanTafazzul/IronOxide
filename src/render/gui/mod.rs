@@ -18,8 +18,10 @@ use wgpu::util::DeviceExt;
 
 pub mod hud;
 pub mod inventory;
+pub mod debug;
 pub use hud::HudRenderer;
 pub use inventory::InventoryGui;
+pub use debug::{DebugMetrics, DebugOverlay};
 
 use crate::game::inventory::PlayerInventory;
 use crate::render::atlas::TextureAtlas;
@@ -96,6 +98,8 @@ pub struct GuiAtlas {
     pub food_empty_uv: GuiRect,
     pub food_full_uv: GuiRect,
     pub food_half_uv: GuiRect,
+    #[allow(dead_code)]
+    pub font_uv: GuiRect,
 }
 
 impl GuiAtlas {
@@ -118,6 +122,7 @@ impl GuiAtlas {
         let mut food_empty_img: Option<RgbaImage> = None;
         let mut food_full_img: Option<RgbaImage> = None;
         let mut food_half_img: Option<RgbaImage> = None;
+        let mut font_img: Option<RgbaImage> = None;
 
         let resolved_path = jar_path
             .map(|p| p.to_path_buf())
@@ -212,6 +217,14 @@ impl GuiAtlas {
                         if entry.read_to_end(&mut buf).is_ok() {
                             if let Ok(img) = image::load_from_memory(&buf) {
                                 food_half_img = Some(img.to_rgba8());
+                            }
+                        }
+                    }
+                    if let Ok(mut entry) = archive.by_name("assets/minecraft/textures/font/ascii.png") {
+                        let mut buf = Vec::new();
+                        if entry.read_to_end(&mut buf).is_ok() {
+                            if let Ok(img) = image::load_from_memory(&buf) {
+                                font_img = Some(img.to_rgba8());
                             }
                         }
                     }
@@ -595,6 +608,38 @@ impl GuiAtlas {
             v_max: (inv_y_off + inventory_bg.height()) as f32 / size as f32,
         };
 
+        // Procedural font fallback if ascii.png not loaded from jar
+        let font_bitmap = font_img.unwrap_or_else(|| {
+            let mut img = RgbaImage::new(128, 128);
+            for c in 32u8..=126 {
+                let col = (c % 16) as u32;
+                let row = (c / 16) as u32;
+                let gx = col * 8;
+                let gy = row * 8;
+                for py in 1..7 {
+                    for px in 1..6 {
+                        img.put_pixel(gx + px, gy + py, Rgba([255, 255, 255, 255]));
+                    }
+                }
+            }
+            img
+        });
+
+        // Paste font (128x128) at (200, 0)
+        let font_x_off = 200;
+        let font_y_off = 0;
+        for y in 0..font_bitmap.height().min(size) {
+            for x in 0..font_bitmap.width().min(size - font_x_off) {
+                atlas_image.put_pixel(font_x_off + x, font_y_off + y, *font_bitmap.get_pixel(x, y));
+            }
+        }
+        let font_uv = GuiRect {
+            u_min: font_x_off as f32 / size as f32,
+            v_min: font_y_off as f32 / size as f32,
+            u_max: (font_x_off + font_bitmap.width()) as f32 / size as f32,
+            v_max: (font_y_off + font_bitmap.height()) as f32 / size as f32,
+        };
+
         Self {
             width: size,
             height: size,
@@ -610,6 +655,24 @@ impl GuiAtlas {
             food_empty_uv,
             food_full_uv,
             food_half_uv,
+            font_uv,
+        }
+    }
+
+    /// Computes the normalized UV sub-rectangle for an 8x8 ASCII character glyph
+    pub fn get_glyph_uv(&self, c: u8) -> GuiRect {
+        let size = Self::ATLAS_SIZE as f32;
+        let col = (c % 16) as f32;
+        let row = (c / 16) as f32;
+        let u_min = (200.0 + col * 8.0) / size;
+        let v_min = (row * 8.0) / size;
+        let u_max = u_min + (8.0 / size);
+        let v_max = v_min + (8.0 / size);
+        GuiRect {
+            u_min,
+            v_min,
+            u_max,
+            v_max,
         }
     }
 }
@@ -627,8 +690,8 @@ pub struct GuiRenderer {
 }
 
 impl GuiRenderer {
-    const MAX_VERTICES: usize = 2048;
-    const MAX_INDICES: usize = 3072;
+    const MAX_VERTICES: usize = 16384;
+    const MAX_INDICES: usize = 24576;
 
     pub fn new(
         device: &wgpu::Device,
@@ -919,6 +982,7 @@ impl GuiRenderer {
         active_slot: usize,
         inventory_gui: Option<(&InventoryGui, &PlayerInventory)>,
         player_stats: Option<&crate::game::stats::PlayerStats>,
+        debug_overlay: Option<(&DebugOverlay, &DebugMetrics)>,
     ) {
         if screen_width == 0 || screen_height == 0 {
             return;
@@ -1026,6 +1090,18 @@ impl GuiRenderer {
                 cross_h,
                 self.atlas.crosshair_uv,
                 [1.0, 1.0, 1.0, 1.0],
+            );
+        }
+
+        // 4. F3 Profiler & Engine Metrics Overlay
+        if let Some((dbg, metrics)) = debug_overlay {
+            dbg.build_debug_mesh(
+                metrics,
+                &self.atlas,
+                sw,
+                sh,
+                &mut normal_vertices,
+                &mut normal_indices,
             );
         }
 

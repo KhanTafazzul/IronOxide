@@ -23,6 +23,7 @@ use game::{
 };
 use render::atlas::{BlockType, TextureAtlas};
 use render::gui::inventory::InventoryGui;
+use render::gui::{DebugMetrics, DebugOverlay};
 use render::mesher::{greedy_mesh_section, ChunkMesh};
 use render::{Camera, RenderContext};
 use storage::WorldStorageManager;
@@ -58,6 +59,7 @@ struct GameApp<'a> {
     key_d: bool,
     key_space: bool,
     key_shift: bool,
+    debug_overlay: DebugOverlay,
     last_frame: Instant,
 }
 
@@ -176,6 +178,7 @@ impl<'a> GameApp<'a> {
             key_d: false,
             key_space: false,
             key_shift: false,
+            debug_overlay: DebugOverlay::new(),
             last_frame: Instant::now(),
         }
     }
@@ -472,6 +475,9 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                             }
                         }
                     }
+                    KeyCode::F3 if pressed => {
+                        self.debug_overlay.toggle();
+                    }
                     KeyCode::Escape if pressed => {
                         if let Some(ctx) = &self.render_ctx {
                             let window = Arc::clone(&ctx.window);
@@ -644,6 +650,44 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                     ctx.update_camera(&self.camera);
                     let camera_right = self.camera.right();
                     let camera_up = self.camera.up();
+
+                    let fps = if dt > 0.0001 { 1.0 / dt } else { 60.0 };
+                    let frame_time_ms = dt * 1000.0;
+                    let debug_metrics = if self.debug_overlay.visible {
+                        let bx = self.player.position.x.floor() as i32;
+                        let by = self.player.position.y.floor() as i32;
+                        let bz = self.player.position.z.floor() as i32;
+                        let p = glam::IVec3::new(bx, by, bz);
+                        let sky = self.world.lighting.get_sky_light(p);
+                        let block = self.world.lighting.get_block_light(p);
+                        let max_l = sky.max(block);
+                        let (rss, total) = DebugOverlay::query_memory_stats();
+                        let gpu_name = ctx.adapter_info.name.clone();
+                        let gpu_backend = format!("{:?}", ctx.adapter_info.backend);
+                        let rendered_quads: usize = self.meshes.values().map(|m| m.quad_count()).sum();
+                        let draw_calls = self.meshes.values().filter(|m| !m.is_empty()).count() + 4;
+
+                        Some(DebugMetrics {
+                            engine_version: "IronOxide 0.1.0".to_string(),
+                            fps,
+                            frame_time_ms,
+                            player_pos: self.player.position,
+                            player_yaw: self.camera.yaw,
+                            player_pitch: self.camera.pitch,
+                            client_light: (max_l, sky, block),
+                            biome: "minecraft:plains".to_string(),
+                            gpu_name,
+                            gpu_backend,
+                            mem_rss_mb: rss,
+                            mem_total_mb: total,
+                            active_chunks: self.world.sections.len(),
+                            rendered_quads,
+                            draw_calls,
+                        })
+                    } else {
+                        None
+                    };
+
                     if let Err(e) = ctx.render(
                         self.active_slot,
                         Some((&self.inventory_gui, &self.inventory)),
@@ -653,6 +697,7 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                         Some(&self.stats),
                         self.item_entities.active_items(),
                         self.mobs.mobs(),
+                        debug_metrics.as_ref().map(|m| (&self.debug_overlay, m)),
                     ) {
                         eprintln!("Render error: {e:?}");
                     }

@@ -29,6 +29,7 @@ pub struct RenderContext<'w> {
     pub effects_renderer: EffectsRenderer,
     pub entity_renderer: crate::render::entity_renderer::EntityRenderer,
     pub mob_renderer: crate::render::models::MobRenderer,
+    pub adapter_info: wgpu::AdapterInfo,
 }
 
 impl<'w> RenderContext<'w> {
@@ -49,6 +50,7 @@ impl<'w> RenderContext<'w> {
             })
             .await?;
 
+        let adapter_info = adapter.get_info();
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor::default())
             .await?;
@@ -149,6 +151,7 @@ impl<'w> RenderContext<'w> {
             effects_renderer,
             entity_renderer,
             mob_renderer,
+            adapter_info,
         })
     }
 
@@ -181,6 +184,7 @@ impl<'w> RenderContext<'w> {
         player_stats: Option<&crate::game::stats::PlayerStats>,
         entities: &[crate::game::entities::ItemEntity],
         mobs: &[crate::game::mobs::MobEntity],
+        debug_overlay: Option<(&crate::render::gui::DebugOverlay, &crate::render::gui::DebugMetrics)>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let output = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(tex) | wgpu::CurrentSurfaceTexture::Suboptimal(tex) => tex,
@@ -275,6 +279,7 @@ impl<'w> RenderContext<'w> {
             active_slot,
             inventory_gui,
             player_stats,
+            debug_overlay,
         );
 
         self.queue.submit(std::iter::once(encoder.finish()));

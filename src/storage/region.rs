@@ -244,51 +244,11 @@ impl RegionFile {
 // ---------------------------------------------------------------------------
 
 pub fn block_to_vanilla_name(block: BlockType) -> &'static str {
-    match block {
-        BlockType::Air => "minecraft:air",
-        BlockType::Stone => "minecraft:stone",
-        BlockType::Dirt => "minecraft:dirt",
-        BlockType::GrassBlock => "minecraft:grass_block",
-        BlockType::Cobblestone => "minecraft:cobblestone",
-        BlockType::Deepslate => "minecraft:deepslate",
-        BlockType::OakLog => "minecraft:oak_log",
-        BlockType::OakPlanks => "minecraft:oak_planks",
-        BlockType::OakLeaves => "minecraft:oak_leaves",
-        BlockType::Bedrock => "minecraft:bedrock",
-        BlockType::Sand => "minecraft:sand",
-        BlockType::Glass => "minecraft:glass",
-        BlockType::Bricks => "minecraft:bricks",
-        BlockType::Torch => "minecraft:torch",
-        BlockType::Lava => "minecraft:lava",
-        BlockType::Water => "minecraft:water",
-        BlockType::Obsidian => "minecraft:obsidian",
-        BlockType::Vine => "minecraft:vine",
-        BlockType::Chest => "minecraft:chest",
-    }
+    block.vanilla_name()
 }
 
 pub fn vanilla_name_to_block(name: &str) -> BlockType {
-    match name {
-        "minecraft:stone" => BlockType::Stone,
-        "minecraft:dirt" => BlockType::Dirt,
-        "minecraft:grass_block" => BlockType::GrassBlock,
-        "minecraft:cobblestone" => BlockType::Cobblestone,
-        "minecraft:deepslate" => BlockType::Deepslate,
-        "minecraft:oak_log" => BlockType::OakLog,
-        "minecraft:oak_planks" => BlockType::OakPlanks,
-        "minecraft:oak_leaves" => BlockType::OakLeaves,
-        "minecraft:bedrock" => BlockType::Bedrock,
-        "minecraft:sand" => BlockType::Sand,
-        "minecraft:glass" => BlockType::Glass,
-        "minecraft:bricks" => BlockType::Bricks,
-        "minecraft:torch" => BlockType::Torch,
-        "minecraft:lava" => BlockType::Lava,
-        "minecraft:water" => BlockType::Water,
-        "minecraft:obsidian" => BlockType::Obsidian,
-        "minecraft:vine" => BlockType::Vine,
-        "minecraft:chest" => BlockType::Chest,
-        _ => BlockType::Air,
-    }
+    BlockType::from_vanilla_name(name).unwrap_or(BlockType::Air)
 }
 
 /// Serializes chunk column sections and light into a vanilla-compliant NBT Compound

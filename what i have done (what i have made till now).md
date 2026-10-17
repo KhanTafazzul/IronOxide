@@ -3,8 +3,8 @@
 
 > **Project Goal**: Re-implement Minecraft 1.20.4 client and voxel engine from scratch in **Rust** using **WGPU** and **WGSL** shaders by reverse-engineering `client.jar` using decompilation and exact vanilla algorithms.
 >
-> **Status**: **135 / 135 Unit & Integration Tests Passing** ✅
-> **Last Updated**: Tasks 1 through 26 Fully Completed & Verified.
+> **Status**: **162 / 162 Unit & Integration Tests Passing** ✅
+> **Last Updated**: Tasks 1 through 30 & Task 32 Fully Completed & Verified.
 
 ---
 
@@ -33,6 +33,11 @@
 | **Task 24: Biome Colormap Tinting** | `src/render/colormap.rs` | ✅ Done | Triangular barycentric UV colormap sampling, 3x3 neighbor kernel, per-vertex tints |
 | **Task 25: Volumetric Precipitation** | `src/world/weather.rs`, `src/render/weather_renderer.rs` | ✅ Done | Rain/Snow/Thunder state machine, lapse rate, 32x32x32 particle box, scrolling rain sheets |
 | **Task 26: Tile Entities & Chest UI** | `src/world/tile_entity.rs`, `src/render/gui/chest_screen.rs` | ✅ Done | Chunk section tile entity storage, 27-slot chest NBT serialization, 176x168 container GUI, shift-click transfer |
+| **Task 27: Block Registry & Voxel Models** | `src/world/block_registry.rs` | ✅ Done | 3 Dimensions (Overworld, Nether, End), Voxel shapes (Stairs, Slabs, Rods), properties |
+| **Task 28: Nether Generator & 5 Biomes** | `src/world/generator/nether.rs` | ✅ Done | Closed-box 3D density (Y=0..128), Bedrock floor/ceiling, Lava ocean Y<=31, 5 Nether Biomes & features |
+| **Task 29: The End Generator & Islands** | `src/world/generator/the_end.rs` | ✅ Done | Central island ($R \le 100$), void gap ($100 \le R < 1000$), outer islands, Simplex noise, Chorus plant cellular loop |
+| **Task 30: Jigsaw Structure Engine** | `src/world/structures/jigsaw.rs` | ✅ Done | Recursive Jigsaw assembly, NBT schematic parser/serializer, AABB intersection check, Plains Village & Woodland Mansion |
+| **Task 32: Nether & End Portals** | `src/game/portals.rs` | ✅ Done | 4x5 to 23x23 Obsidian frame detection, Flint & Steel lighting, (X/8, Y, Z/8) translation, 128-block search/forcing, 80/0 tick timers, 12-block End frame ring & fixed spawn platform |
 
 ---
 
@@ -269,17 +274,177 @@
 
 ---
 
+### 19. Task 27: Comprehensive Block Registry & Voxel Models
+- **Module**: `src/world/block_registry.rs`, `src/world/mod.rs`, `src/render/atlas.rs`, `src/game/physics.rs`, `src/game/raycast.rs`, `src/storage/region.rs`, `src/game/mining/mod.rs`, `src/audio/mod.rs`
+- **REA Decompiled References**:
+  - `net.minecraft.world.level.block.Blocks` (`cws.class`)
+  - `net.minecraft.world.level.block.state.BlockBehaviour$Properties` (`djg$d.class`)
+  - `net.minecraft.world.level.block.StairBlock` (`dej.class`)
+  - `net.minecraft.world.level.block.SlabBlock` (`dds.class`)
+  - `net.minecraft.world.level.block.EndRodBlock` (`czg.class` / `dcy.class`)
+- **Features**:
+  - **Comprehensive Multi-Dimensional BlockId Enum**:
+    - **Overworld**: Wood variants (Oak, Birch, Spruce, Dark Oak logs, planks, leaves), Stone types (Stone, Cobblestone, Andesite, Granite, Diorite, Deepslate, Bricks), Ores (Coal, Iron, Copper, Gold, Redstone, Lapis, Diamond, Emerald), Glass, Obsidian, Sand, Gravel, Bedrock, Dirt, GrassBlock.
+    - **Nether**: Netherrack, Soul Sand, Soul Soil, Basalt, Polished Basalt, Blackstone, Nether Bricks, Glowstone, Crimson/Warped Nylium, Crimson/Warped Stems, Nether Wart Block, Warped Wart Block, Crying Obsidian.
+    - **The End**: End Stone, End Stone Bricks, Purpur Block, Purpur Pillar, End Rod, Purpur Stairs, Purpur Slab, End Portal Frame.
+  - **Complete Property Metadata Flags (`BlockProperties`)**:
+    - `is_solid`: Directs player and entity physics collision resolution.
+    - `is_transparent`: Dictates face-culling against adjacent blocks (transparent neighbor faces remain rendered).
+    - `light_emission`: Point and ambient emission from 0 to 15 (Lava/Glowstone = 15, Torch/End Rod = 14, Crying Obsidian = 10, End Portal Frame = 1).
+    - `hardness` & `blast_resistance`: Exact vanilla properties (Obsidian = 50.0/1200.0, Bedrock = -1.0/3.6M, Stone = 1.5/6.0, Wood = 2.0/3.0, Dirt = 0.5/0.5).
+    - `sound_family`, `tool_required`, and `min_harvest_tier` classifications.
+  - **Compound Non-Cubic Bounding Boxes & Raycast DDA Support**:
+    - Slabs: half-cube AABB $[0, 0, 0] \rightarrow [1, 0.5, 1]$.
+    - Stairs: compound AABBs (base slab $[0, 0, 0] \rightarrow [1, 0.5, 1]$ + directional step $[0, 0.5, 0] \rightarrow [1, 1, 0.5]$).
+    - End Rod: centered column $[0.375, 0, 0.375] \rightarrow [0.625, 1, 0.625]$.
+    - Torches, Chests, and End Portal Frames ($13/16$ high).
+    - Raycast traversal accurately clips against individual sub-boxes; rays pass cleanly through the empty upper half of slabs and around end rod columns.
+    - Entity physics resolves collisions against compound bounding boxes with step-up support.
+  - **Full Subsystem Synchronization**:
+    - `TextureAtlas` stitches textures from `client.jar` with procedural color fallbacks for all dimensions.
+    - Anvil `.mca` region reader and writer converts all blocks to/from vanilla namespaced IDs.
+    - Audio sound events, mining speeds, and inventory conversions wired across the engine.
+
+---
+
+### 15. Task 28: The Nether Generator & 5 Biomes
+- **Module**: `src/world/generator/nether.rs`, `src/world/generator/mod.rs`
+- **REA Decompiled References**:
+  - `net.minecraft.world.level.biome.MultiNoiseBiomeSourceParameterList$Preset` (`cvc$a$1.class`):
+    Target climate points in $(T, H, W, \text{offset})$ parameter space:
+    * `Nether Wastes`: $(0.0, 0.0, 0.0, 0.0)$
+    * `Soul Sand Valley`: $(0.0, -0.5, 0.0, 0.0)$
+    * `Crimson Forest`: $(0.4, 0.0, 0.0, 0.0)$
+    * `Warped Forest`: $(0.0, 0.5, 0.0, 0.375)$
+    * `Basalt Deltas`: $(-0.5, 0.0, 0.0, 0.175)$
+  - `net.minecraft.data.worldgen.SurfaceRuleData` (`pr.class` - method `b()`):
+    Nether surface rule sequences, bedrock roof ($Y \ge 123$) and floor ($Y \le 4$), lava ocean level ($Y \le 31$), and per-biome ground strata.
+- **Features Implemented**:
+  - **Closed-Box 3D Density Noise ($Y = 0..128$)**:
+    * Solid Bedrock floor at $Y = 0$, stochastic dithering from $Y = 1$ to $Y = 4$.
+    * Solid Bedrock roof at $Y = 127$, stochastic dithering from $Y = 123$ to $Y = 126$.
+    * Lava ocean filling all open cavities below $Y \le 31$.
+    * Mid-world open caverns ($Y = 32..114$) with 3D Perlin noise overhangs, floating ledges, and pillars.
+  - **5 Nether Biomes & Environmental Features**:
+    1. **Nether Wastes**: Netherrack expanse, soul sand shorelines near lava, ceiling glowstone stalactite clusters. Traditional dark red/brown ambient fog.
+    2. **Soul Sand Valley**: Undulating Soul Sand and Soul Soil dunes, massive ribbed Bone Block fossils, ethereal cyan/blue ambient fog (`#1A3543`).
+    3. **Crimson Forest**: Surface Crimson Nylium, giant Crimson Fungi (thick `CrimsonStem` trunks + `NetherWartBlock` dome canopies), weeping vines, rich fiery crimson fog (`#330808`).
+    4. **Warped Forest**: Surface Warped Nylium, giant Warped Fungi (`WarpedStem` + `WarpedWartBlock`), twisting vines, deep teal/blue-green fog (`#1A2223`).
+    5. **Basalt Deltas**: Rugged fragmented terrain of `Basalt`, `PolishedBasalt`, and `Blackstone`, boiling `MagmaBlock` pools, volcanic ash/smoke fog (`#686873`).
+  - **Full Chunk Generation & World Integration**:
+    * `NetherGenerator::generate_chunk_column(chunk_x, chunk_z)` builds all 8 vertical `ChunkSection`s ($Y = 0..128$).
+    * `NetherGenerator::populate_world(world, chunk_x, chunk_z)` inserts generated sections directly into the multi-section `World`.
+
+---
+
+### 16. Task 29: The End Islands Generator & Biomes
+- **Module**: `src/world/generator/the_end.rs`, `src/world/generator/mod.rs`, `src/world/block_registry.rs`, `src/render/atlas.rs`
+- **REA Decompiled References**:
+  - `net.minecraft.world.level.levelgen.DensityFunctions$EndIslandDensityFunction` (`dok$i.class`):
+    * Central Island profile: $\text{height} = 100.0 - \sqrt{x^2 + z^2} \times 8.0$, clamped to $[-100.0, 80.0]$.
+    * Void Gap enforcement: chunk cell squared distance check $cx^2 + cz^2 \le 4096$ suppresses island generation between radius 100 and 1000 blocks.
+    * Outer Island sampling: sample chunk cell grid $(cx, cz)$ with continuous noise threshold $<-0.35$; variable island radius $R = (\text{abs}(cx) \times 3439 + \text{abs}(cz) \times 147) \pmod{13} + 9$.
+  - `net.minecraft.world.level.biome.TheEndBiomeSource` (`cvf.class`):
+    * Radial biome distribution: `TheEnd` ($R \le 100$), `TheVoid` ($100 < R < 1000$), `EndHighlands`, `EndMidlands`, `EndBarrens`, `SmallEndIslands` ($R \ge 1000$).
+  - `net.minecraft.world.level.levelgen.synth.SimplexNoise` (`edx.class`):
+    * 2D Simplex noise implementation with permutation table and skew constants $F_2 = 0.5(\sqrt{3} - 1)$, $G_2 = (3 - \sqrt{3})/6$.
+- **Features Implemented**:
+  - **Radial Island Density Generation**:
+    * **Central Island**: Continuous convex landmass centered at $(0, 0)$ with radius $\sim 100$ blocks, towering peak at $Y \approx 55..65$, composed entirely of `EndStone`.
+    * **The Void Gap**: Complete silence between $R = 100$ and $R = 1000$ blocks with strictly zero density.
+    * **Outer Floating Islands**: Beyond $R \ge 1000$, islands emerge in high regions of Simplex noise space with smooth parabolic underside falloff: $\text{underside} = 1.0 - \frac{(y - \text{center})^2}{\text{thickness}^2}$.
+  - **Stochastic Cellular Chorus Plant & Flower Growth**:
+    * Outer island upper surfaces ($Y \ge 50$) spawn chorus plants.
+    * Recursive branching cellular loop: shoots vertically 3–5 blocks, branches into horizontal elbows (cardinal directions with PRNG coordinates), climbs vertically, and caps endpoints with `BlockId::ChorusFlower`.
+  - **Block Registry & Texture Additions**:
+    * Added `ChorusPlant` and `ChorusFlower` to `BlockId`.
+    * Procedural texture fallbacks and atlas UV registration for both chorus blocks.
+  - **Full Chunk Generation & World Population**:
+    * `TheEndGenerator::generate_chunk_column(chunk_x, chunk_z)` builds all 8 vertical `ChunkSection`s ($Y = 0..128$).
+    * `TheEndGenerator::populate_world(world, chunk_x, chunk_z)` populates the multi-section `World`.
+
+---
+
+### 17. Task 32: Nether & End Portal Linking Engine
+- **Module**: `src/game/portals.rs`, `src/world/block_registry.rs`, `src/render/atlas.rs`, `src/game/inventory/mod.rs`, `src/game/mod.rs`
+- **REA Decompiled References**:
+  - `net.minecraft.world.level.portal.PortalShape` (`efp.class`):
+    * Minimum inner dimensions: 2 wide $\times$ 3 high ($4 \times 5$ total frame).
+    * Maximum inner dimensions: 21 wide $\times$ 21 high ($23 \times 23$ total frame).
+    * Frame verification: bottom, top, left, right obsidian columns; interior air/portal space.
+  - `net.minecraft.world.level.portal.PortalForcer` (`efn.class`):
+    * Search radius: 128 blocks horizontal search for existing active `NetherPortal` blocks.
+    * Frame creation: dynamic 4x5 Obsidian frame with 2x3 portal opening, safe air exit clearance pockets front and back, and solid landing steps.
+  - `net.minecraft.world.level.block.NetherPortalBlock` (`dbt.class`):
+    * Axis orientation (X or Z), light level 11, translucent purple swirling render pass.
+  - `net.minecraft.world.level.block.EndPortalBlock` (`cze.class`) & `EndPortalFrameBlock` (`czf.class`):
+    * 12-block frame ring layout surrounding a $3 \times 3$ central void.
+    * Fixed End spawn coordinates $(100.5, 49.0, 0.5)$ with $5 \times 5$ Obsidian platform at $Y = 48$ and air clearance above.
+- **Features Implemented**:
+  - **Nether Portal Shape Detection & Lighting**:
+    * Scans and verifies any rectangular Obsidian frame from $4 \times 5$ up to $23 \times 23$ along either the X or Z axis.
+    * Lighting with Flint & Steel turns internal air into `BlockId::NetherPortal`.
+    * Breaking any frame block propagates and collapses inner portal blocks back into `BlockId::Air`.
+  - **Coordinate Translation & Linking**:
+    * Overworld to Nether: $(X / 8, Y, Z / 8)$ clamped to safe Nether bounds ($Y \in [10, 120]$).
+    * Nether to Overworld: $(X \times 8, Y, Z \times 8)$ clamped to Overworld bounds ($Y \in [10, 250]$).
+    * Radial search within 128 blocks for existing portal; if none exists, constructs a new 4x5 Obsidian frame with 2x3 portal interior.
+  - **Teleportation State Machine & Visual Transition**:
+    * Tracks ticks spent in portal: 80 ticks for Survival (4.0s), 0 ticks for Creative (instantaneous).
+    * Dynamic screen distortion: swirling purple tint overlay, nausea camera wobble $\sin(t \times 0.25) \times \text{intensity} \times 0.35$.
+    * 100-tick post-teleport cooldown to prevent infinite oscillation.
+  - **End Portal Mechanics**:
+    * Validates the 12-frame ring geometry.
+    * Fills inner $3 \times 3$ with `BlockId::EndPortal`.
+    * Stepping in triggers instant teleportation to $(100.5, 49.0, 0.5)$ in The End and generates the $5 \times 5$ Obsidian platform at $Y=48$.
+
+---
+
+### 18. Task 30: Jigsaw Structure Engine (Villages & Mansions)
+- **Module**: `src/world/structures/jigsaw.rs`, `src/world/structures/mod.rs`, `src/world/mod.rs`
+- **REA Decompiled References**:
+  - `net.minecraft.world.level.levelgen.structure.structures.JigsawStructure` (`ebg.class`):
+    * `startPool`: initial root template pool
+    * `maxDepth`: recursion limit ($1 \le \text{depth} \le 7$ for villages, up to 20 for complex structures)
+    * `maxDistanceFromCenter`: 128-block bounding radius from structure anchor
+    * `projectStartToHeightmap`: terrain surface height snapping boolean
+  - `net.minecraft.world.level.levelgen.structure.pools.JigsawPlacement`:
+    * Face-to-face snap formula: $\text{origin}_{\text{cand}} = \text{joint}_{\text{world}} + \text{facing}_{\text{world}} - R(\text{joint}_{\text{local}})$
+    * Joint rotation and alignment matching opposite cardinals: $R(\text{facing}_{\text{local}}) = \text{facing}_{\text{world}}.\text{opposite}()$
+    * AABB non-overlap validation against all previously placed pieces
+  - `net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate` (`ebt.class`):
+    * Gzip / Uncompressed NBT schematic serialization: `size` [W, H, D], `palette` block names, `blocks` pos + state + jigsaw tile entity metadata.
+- **Features Implemented**:
+  - **Recursive Jigsaw Assembly Engine**:
+    * Queue-based breadth-first / recursive joint matching.
+    * Cardinal 90-degree step rotations (`None`, `Clockwise90`, `Clockwise180`, `CounterClockwise90`) for positions, sizes, and joint vectors.
+    * AABB intersection prevention: candidate pieces are checked against all placed pieces (with 0.1 perimeter margin to allow adjacent wall contact without collision).
+  - **Plains Village Generation**:
+    * Central town well (size 5x7x5) with cobblestone rim, central water source, oak pillars, and 4 road connection joints.
+    * Branching street path segments (size 3x1x6) with T-junctions and building connection joints.
+    * Plains cottages (size 5x5x5) with cobblestone floor, oak log corners, oak planks, glass windows, and doorway.
+    * 2-row wheat farms (size 7x2x7) with central irrigation canal and cobblestone borders.
+    * Terrain surface height snapping: dynamically adjusts starting anchor to ground heightmap $Y(x, z)$.
+  - **Woodland Mansion Generation**:
+    * 3-story modular grid architecture ($3 \times 3$ rooms per floor, $8 \times 6 \times 8$ module dimensions).
+    * Cobblestone foundation floor and Dark Oak exterior logs / planks with glass windows.
+    * Floor 1: Grand entrance foyer, dining hall, corridors.
+    * Floor 2: Dual grand library (bookshelves and study desks), master bedroom with bed and chest.
+    * Floor 3: Attic wooden maze with partition walls and high ceiling.
+
+---
+
 ## 📈 Test Suite & Verification Status
 
 ```text
-running 135 tests
-test result: ok. 135 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.09s
+running 162 tests
+test result: ok. 162 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.85s
 ```
 
 All subsystems have dedicated unit and integration tests covering:
-- Physics collision resolution, gravity, jumping, and step-ups
+- Physics collision resolution, gravity, jumping, step-ups, and non-cubic compound collision boxes
 - A* pathfinding and hostile mob targeting
-- Anvil `.mca` chunk header serialization and zlib roundtrip
+- Anvil `.mca` chunk header serialization, block ID mapping, and zlib roundtrip
 - Cellular automaton fluid flow and lava/water collision
 - Breadth-first block & sky light propagation
 - Handheld dynamic light shader uniform falloff
@@ -287,51 +452,21 @@ All subsystems have dedicated unit and integration tests covering:
 - Barycentric colormap UV sampling and 3x3 kernel smoothing
 - Weather state machine transitions, temperature lapse rate, and rain/snow geometry generation
 - Tile entities (Chest 27 slots, shift-click transfer, NBT persistence)
+- Block registry across 3 dimensions, vanilla ID roundtrips, non-cubic bounding boxes & raycasting
+- Closed-box 3D density noise, Bedrock boundaries, Lava ocean filling, and 5 Nether biomes climate & feature generation
+- End island radial generator (Central island, Void gap, Outer islands, Simplex noise, and Chorus plant cellular growth)
+- Nether & End portal linking engine (shape detection, coordinate translation, 128-block search/forcing, 80/0 tick timers, and End portal fixed spawn)
+- Recursive Jigsaw structure engine (NBT schematic parser/serializer, joint orientation matching, AABB collision check, Plains Village, and Woodland Mansion)
 
 ---
 
 ## 🚀 Upcoming Tasks & Tomorrow's Execution Roadmap
 
-When resuming tomorrow, execution will start directly from **Task 27**:
-
-### 🎯 [READY FOR TOMORROW] Task 27: Comprehensive Block Registry & Voxel Models
-- **Target JAR**: `client.jar`
-- **Target Files**:
-  - `src/world/block_registry.rs` (new registry module)
-  - `src/world/voxel_shape.rs` (or `src/render/model.rs`)
-  - `src/render/atlas.rs`, `src/storage/region.rs`, `src/game/mining/mod.rs`, `src/audio/mod.rs`
-- **Decompiled References**:
-  - `net.minecraft.world.level.block.Blocks`
-  - `net.minecraft.world.level.block.state.BlockBehaviour$Properties`
-- **Detailed Specifications**:
-  1. **Expanded BlockId Enum across all 3 Dimensions**:
-     - **Overworld**: Wood variants (Oak, Birch, Spruce, Dark Oak, Jungle, Acacia), Stone types (Cobblestone, Andesite, Granite, Diorite, Deepslate), Ores (Coal, Iron, Copper, Gold, Redstone, Lapis, Diamond, Emerald), Glass, Obsidian, Sand, Gravel, Bricks.
-     - **Nether**: Netherrack, Soul Sand, Soul Soil, Basalt, Polished Basalt, Blackstone, Nether Bricks, Glowstone, Crimson & Warped Nylium, Stems, Hyphae, and Wart Blocks.
-     - **The End**: End Stone, End Stone Bricks, Purpur Block, Purpur Pillar, End Rod, Purpur Stairs, End Portal Frame.
-  2. **Voxel Properties Metadata per Block**:
-     - `is_solid`: Affects entity collision.
-     - `is_transparent`: Dictates face-culling (Glass, Leaves, Water, Air, etc.).
-     - `light_emission`: u8 (0..15) (Torch = 14, Glowstone = 15, Sea Lantern = 15, Lava = 15, Crying Obsidian = 10, Redstone Torch = 7).
-     - `blast_resistance`: f32 (Obsidian = 1200.0, Stone = 6.0, Wood = 2.0, Dirt = 0.5).
-     - `hardness`: f32 (Obsidian = 50.0, Stone = 1.5, Wood = 2.0, Dirt = 0.5, Bedrock = -1.0).
-     - `sound_type`: Dig/Step sound family (Wood, Stone, Sand, Grass, Glass, Metal, Gravel, Basalt, SoulSand).
-     - `tool_required`: ToolType (Pickaxe, Axe, Shovel, Hoe, None).
-     - `min_harvest_tier`: HarvestTier (Hand, Wood, Stone, Iron, Diamond, Netherite).
-  3. **Non-Cube Voxel Shapes & Selection Boxes**:
-     - Full cube: $[0.0, 0.0, 0.0] \rightarrow [1.0, 1.0, 1.0]$
-     - Slab: $[0.0, 0.0, 0.0] \rightarrow [1.0, 0.5, 1.0]$
-     - Stairs: Compound bounding boxes (base slab $[0, 0, 0] \rightarrow [1, 0.5, 1]$ + upper half step)
-     - Torch: Centered thin pillar $[0.4, 0.0, 0.4] \rightarrow [0.6, 0.6, 0.6]$
-     - End Rod: Centered rod $[0.375, 0.0, 0.375] \rightarrow [0.625, 1.0, 0.625]$
-     - Carpet / Snow layer: $[0.0, 0.0, 0.0] \rightarrow [1.0, 0.0625, 1.0]$
-  4. **System Sync**:
-     - Sync texture atlas sprite names and face UVs.
-     - Update Anvil `.mca` region block string-to-ID parser for all new blocks.
-     - Wire sound events, mining speeds, and particle colors.
+When resuming next, execution will start directly from **Task 31**:
 
 ---
 
-### 📋 Task 28: Furnace & Smelting Block Entity with Burn Time & Recipe Book
+### 📋 Task 31: Furnace & Smelting Block Entity with Burn Time & Recipe Book
 - **Modules**: `src/world/tile_entity.rs`, `src/render/gui/furnace_screen.rs`, `src/game/crafting/smelting.rs`
 - **Features**:
   - `FurnaceTileEntity`: 3 slots (Input, Fuel, Output), `burn_time`, `cook_time`, `total_cook_time` (200 ticks standard).
@@ -341,7 +476,7 @@ When resuming tomorrow, execution will start directly from **Task 27**:
 
 ---
 
-### 📋 Task 29: Redstone Wire, Repeater & Power Propagation Engine
+### 📋 Task 33: Redstone Wire, Repeater & Power Propagation Engine
 - **Modules**: `src/world/redstone/`, `src/world/block_registry.rs`
 - **Features**:
   - Signal strength simulation ($0 \le \text{power} \le 15$) with step-down attenuation.
@@ -351,8 +486,8 @@ When resuming tomorrow, execution will start directly from **Task 27**:
 
 ---
 
-### 📋 Task 30: Procedural Multi-Biome Terrain World Generator
-- **Modules**: `src/world/generation/`, `src/world/noise.rs`
+### 📋 Task 34: Overworld Procedural Multi-Biome Terrain World Generator
+- **Modules**: `src/world/generator/overworld.rs`
 - **Features**:
   - Multi-octave Perlin / Simplex noise generator with seed hashing.
   - Continentalness, Erosion, and Peaks/Valleys noise splines matching Minecraft 1.18+ terrain format.

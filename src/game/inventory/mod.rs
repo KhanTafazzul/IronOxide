@@ -38,6 +38,12 @@ pub const ITEM_LANTERN: u16 = 21;
 pub const ITEM_GLOWSTONE: u16 = 22;
 pub const ITEM_VINE: u16 = 23;
 pub const ITEM_CHEST: u16 = 24;
+pub const ITEM_FLINT_AND_STEEL: u16 = 25;
+pub const ITEM_EYE_OF_ENDER: u16 = 26;
+pub const ITEM_END_PORTAL_FRAME: u16 = 27;
+pub const ITEM_NETHER_PORTAL: u16 = 28;
+pub const ITEM_DRAGON_HEAD: u16 = 29;
+pub const ITEM_ELYTRA: u16 = 30;
 
 // REA Slot Constants from cjc.class
 pub const RESULT_SLOT: usize = 0;
@@ -118,6 +124,12 @@ impl ItemStack {
             ITEM_STICK => "Stick",
             ITEM_VINE => "Vines",
             ITEM_CHEST => "Chest",
+            ITEM_FLINT_AND_STEEL => "Flint and Steel",
+            ITEM_EYE_OF_ENDER => "Eye of Ender",
+            ITEM_END_PORTAL_FRAME => "End Portal Frame",
+            ITEM_NETHER_PORTAL => "Nether Portal",
+            ITEM_DRAGON_HEAD => "Dragon Head",
+            ITEM_ELYTRA => "Elytra",
             _ => "Unknown Item",
         }
     }
@@ -143,6 +155,11 @@ impl ItemStack {
             BlockType::Obsidian => ITEM_OBSIDIAN,
             BlockType::Vine => ITEM_VINE,
             BlockType::Chest => ITEM_CHEST,
+            BlockType::EndPortalFrame => ITEM_END_PORTAL_FRAME,
+            BlockType::NetherPortal => ITEM_NETHER_PORTAL,
+            BlockType::DragonHead => ITEM_DRAGON_HEAD,
+            BlockType::Glowstone => ITEM_GLOWSTONE,
+            _ => ITEM_STONE,
         };
         Some(Self::new(id, count))
     }
@@ -167,6 +184,9 @@ impl ItemStack {
             ITEM_OBSIDIAN => Some(BlockType::Obsidian),
             ITEM_VINE => Some(BlockType::Vine),
             ITEM_CHEST => Some(BlockType::Chest),
+            ITEM_END_PORTAL_FRAME => Some(BlockType::EndPortalFrame),
+            ITEM_NETHER_PORTAL => Some(BlockType::NetherPortal),
+            ITEM_DRAGON_HEAD => Some(BlockType::DragonHead),
             _ => None,
         }
     }

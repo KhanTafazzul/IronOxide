@@ -11,7 +11,7 @@
 
 use glam::Vec3;
 #[allow(unused_imports)]
-use crate::render::atlas::BlockType;
+use crate::render::atlas::{BlockType, Direction};
 use crate::render::mesher::BlockReader;
 
 /// Standard Minecraft player physics constants (per tick, 20 ticks = 1 sec)
@@ -93,6 +93,56 @@ impl Aabb {
         Self {
             min: self.min + delta,
             max: self.max + delta,
+        }
+    }
+
+    /// REA Verified: net.minecraft.world.phys.AABB.clip(Vec3, Vec3) -> ctr.a
+    /// Ray-AABB intersection test returning (distance, hit_face, hit_point)
+    pub fn ray_intersection(&self, origin: Vec3, dir: Vec3, max_t: f32) -> Option<(f32, Direction, Vec3)> {
+        let mut t_near = 0.0f32;
+        let mut t_far = max_t;
+        let mut hit_face = Direction::Up;
+
+        for axis in 0..3 {
+            let (orig, d, b_min, b_max, face_neg, face_pos) = match axis {
+                0 => (origin.x, dir.x, self.min.x, self.max.x, Direction::West, Direction::East),
+                1 => (origin.y, dir.y, self.min.y, self.max.y, Direction::Down, Direction::Up),
+                _ => (origin.z, dir.z, self.min.z, self.max.z, Direction::North, Direction::South),
+            };
+
+            if d.abs() < 1e-8 {
+                if orig < b_min || orig > b_max {
+                    return None;
+                }
+            } else {
+                let mut t1 = (b_min - orig) / d;
+                let mut t2 = (b_max - orig) / d;
+                let mut f_entry = face_neg;
+
+                if t1 > t2 {
+                    std::mem::swap(&mut t1, &mut t2);
+                    f_entry = face_pos;
+                }
+
+                if t1 > t_near {
+                    t_near = t1;
+                    hit_face = f_entry;
+                }
+                if t2 < t_far {
+                    t_far = t2;
+                }
+
+                if t_near > t_far {
+                    return None;
+                }
+            }
+        }
+
+        if t_near <= max_t {
+            let hit_point = origin + dir * t_near;
+            Some((t_near, hit_face, hit_point))
+        } else {
+            None
         }
     }
 
@@ -236,8 +286,12 @@ impl PlayerPhysics {
             for z in min_z..=max_z {
                 for x in min_x..=max_x {
                     let block = world.get_block_at(x, y, z);
-                    if block.is_opaque() {
-                        boxes.push(Aabb::from_block(x, y, z));
+                    if block.is_solid() {
+                        for bb in block.collision_boxes(glam::IVec3::new(x, y, z)) {
+                            if bb.intersects(query) {
+                                boxes.push(bb);
+                            }
+                        }
                     }
                 }
             }

@@ -86,22 +86,18 @@ impl SoundType {
 
     /// Resolves block type to appropriate SoundType
     pub fn for_block(block: BlockType) -> Self {
+        if block == BlockType::Water {
+            return Self {
+                volume: 1.0,
+                pitch: 1.0,
+                break_sound: SoundEvent::WaterSplash,
+                step_sound: SoundEvent::WaterSplash,
+                hit_sound: SoundEvent::WaterSplash,
+                fall_sound: SoundEvent::WaterSplash,
+            };
+        }
+
         match block {
-            BlockType::Air => Self::STONE,
-            BlockType::GrassBlock | BlockType::Dirt => Self::GRASS,
-            BlockType::Stone | BlockType::Cobblestone | BlockType::Deepslate | BlockType::Bricks | BlockType::Bedrock | BlockType::Obsidian => {
-                Self::STONE
-            }
-            BlockType::OakLog | BlockType::OakPlanks | BlockType::Chest => Self::WOOD,
-            BlockType::Sand => Self::GRAVEL,
-            BlockType::OakLeaves | BlockType::Vine => Self {
-                volume: 0.8,
-                pitch: 1.2,
-                break_sound: SoundEvent::GrassBreak,
-                step_sound: SoundEvent::GrassStep,
-                hit_sound: SoundEvent::GrassHit,
-                fall_sound: SoundEvent::GrassStep,
-            },
             BlockType::Glass => Self {
                 volume: 1.0,
                 pitch: 1.4,
@@ -110,16 +106,38 @@ impl SoundType {
                 hit_sound: SoundEvent::StoneDig,
                 fall_sound: SoundEvent::StoneStep,
             },
-            BlockType::Torch => Self::WOOD,
-            BlockType::Lava => Self::STONE,
-            BlockType::Water => Self {
-                volume: 1.0,
-                pitch: 1.0,
-                break_sound: SoundEvent::WaterSplash,
-                step_sound: SoundEvent::WaterSplash,
-                hit_sound: SoundEvent::WaterSplash,
-                fall_sound: SoundEvent::WaterSplash,
+            BlockType::OakLeaves
+            | BlockType::BirchLeaves
+            | BlockType::SpruceLeaves
+            | BlockType::DarkOakLeaves
+            | BlockType::Vine => Self {
+                volume: 0.8,
+                pitch: 1.2,
+                break_sound: SoundEvent::GrassBreak,
+                step_sound: SoundEvent::GrassStep,
+                hit_sound: SoundEvent::GrassHit,
+                fall_sound: SoundEvent::GrassStep,
             },
+            _ => {
+                use crate::world::SoundFamily;
+                match block.properties().sound_family {
+                    SoundFamily::Wood => Self::WOOD,
+                    SoundFamily::Grass => Self::GRASS,
+                    SoundFamily::Gravel | SoundFamily::Sand | SoundFamily::SoulSand => Self::GRAVEL,
+                    SoundFamily::Glass => Self {
+                        volume: 1.0,
+                        pitch: 1.4,
+                        break_sound: SoundEvent::StoneBreak,
+                        step_sound: SoundEvent::StoneStep,
+                        hit_sound: SoundEvent::StoneDig,
+                        fall_sound: SoundEvent::StoneStep,
+                    },
+                    SoundFamily::Stone
+                    | SoundFamily::Basalt
+                    | SoundFamily::Metal
+                    | SoundFamily::NetherWart => Self::STONE,
+                }
+            }
         }
     }
 }

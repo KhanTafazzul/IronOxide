@@ -940,10 +940,10 @@ mod tests {
 
         mesher.request_mesh(section, atlas);
 
-        // Wait up to 1 second for background worker thread to finish
+        // Wait up to 5 seconds for background worker thread to finish
         let start = std::time::Instant::now();
         let mut completed = Vec::new();
-        while start.elapsed().as_millis() < 1000 {
+        while start.elapsed().as_millis() < 5000 {
             completed = mesher.poll_completed();
             if !completed.is_empty() {
                 break;

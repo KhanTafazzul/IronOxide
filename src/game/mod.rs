@@ -3,12 +3,18 @@ pub mod inventory;
 pub mod mining;
 pub mod mobs;
 pub mod physics;
+pub mod portals;
 pub mod raycast;
 pub mod stats;
 pub mod world;
 
 pub use entities::{ItemEntity, ItemEntityManager};
 pub use mobs::{MobEcs, MobEntity, MobEvent, MobType, MobAiState};
+pub use portals::{
+    Dimension, EndPortalRing, NetherPortalShape, PortalAxis, PortalTeleportEvent,
+    PortalTeleportState, build_nether_portal_at, ensure_end_spawn_platform,
+    find_existing_portal, translate_coordinates,
+};
 
 #[allow(unused_imports)]
 pub use stats::PlayerStats;

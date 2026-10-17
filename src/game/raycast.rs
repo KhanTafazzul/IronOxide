@@ -60,23 +60,28 @@ pub fn raycast_voxel(
     let mut y = origin.y.floor() as i32;
     let mut z = origin.z.floor() as i32;
 
-    // Check if origin is already inside a solid block
-    if world.get_block_at(x, y, z).is_opaque() {
-        // Default face opposing ray direction
-        let opposing_face = if dir.y.abs() > dir.x.abs().max(dir.z.abs()) {
-            if dir.y > 0.0 { Direction::Down } else { Direction::Up }
-        } else if dir.x.abs() > dir.z.abs() {
-            if dir.x > 0.0 { Direction::West } else { Direction::East }
-        } else {
-            if dir.z > 0.0 { Direction::North } else { Direction::South }
-        };
+    // Check if origin is already inside a selection box
+    let origin_block = world.get_block_at(x, y, z);
+    for bb in origin_block.selection_boxes(IVec3::new(x, y, z)) {
+        if origin.x >= bb.min.x && origin.x <= bb.max.x
+            && origin.y >= bb.min.y && origin.y <= bb.max.y
+            && origin.z >= bb.min.z && origin.z <= bb.max.z
+        {
+            let opposing_face = if dir.y.abs() > dir.x.abs().max(dir.z.abs()) {
+                if dir.y > 0.0 { Direction::Down } else { Direction::Up }
+            } else if dir.x.abs() > dir.z.abs() {
+                if dir.x > 0.0 { Direction::West } else { Direction::East }
+            } else {
+                if dir.z > 0.0 { Direction::North } else { Direction::South }
+            };
 
-        return Some(RaycastHit {
-            block_pos: IVec3::new(x, y, z),
-            face: opposing_face,
-            hit_point: origin,
-            distance: 0.0,
-        });
+            return Some(RaycastHit {
+                block_pos: IVec3::new(x, y, z),
+                face: opposing_face,
+                hit_point: origin,
+                distance: 0.0,
+            });
+        }
     }
 
     // Step direction along each axis (+1, -1, or 0)
@@ -149,15 +154,36 @@ pub fn raycast_voxel(
             break;
         }
 
-        // Check if targeted voxel is solid
-        if world.get_block_at(x, y, z).is_opaque() {
-            let hit_point = origin + dir * t;
-            return Some(RaycastHit {
-                block_pos: IVec3::new(x, y, z),
-                face: last_face,
-                hit_point,
-                distance: t,
-            });
+        // Check if targeted voxel has selection bounding boxes
+        let block = world.get_block_at(x, y, z);
+        let sel_boxes = block.selection_boxes(IVec3::new(x, y, z));
+        if !sel_boxes.is_empty() {
+            if block.is_opaque() {
+                let hit_point = origin + dir * t;
+                return Some(RaycastHit {
+                    block_pos: IVec3::new(x, y, z),
+                    face: last_face,
+                    hit_point,
+                    distance: t,
+                });
+            } else {
+                let mut best_hit: Option<(f32, Direction, Vec3)> = None;
+                for bb in &sel_boxes {
+                    if let Some((hit_dist, hit_face, hit_pt)) = bb.ray_intersection(origin, dir, max_distance) {
+                        if best_hit.map_or(true, |(best_dist, _, _)| hit_dist < best_dist) {
+                            best_hit = Some((hit_dist, hit_face, hit_pt));
+                        }
+                    }
+                }
+                if let Some((hit_dist, hit_face, hit_pt)) = best_hit {
+                    return Some(RaycastHit {
+                        block_pos: IVec3::new(x, y, z),
+                        face: hit_face,
+                        hit_point: hit_pt,
+                        distance: hit_dist,
+                    });
+                }
+            }
         }
     }
 

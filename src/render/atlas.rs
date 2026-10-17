@@ -36,74 +36,9 @@ impl Direction {
     ];
 }
 
-/// Supported Minecraft Block Types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum BlockType {
-    Air,
-    GrassBlock,
-    Dirt,
-    Stone,
-    Cobblestone,
-    Deepslate,
-    OakPlanks,
-    OakLog,
-    OakLeaves,
-    Bedrock,
-    Sand,
-    Glass,
-    Bricks,
-    Torch,
-    Lava,
-    Water,
-    Obsidian,
-    Vine,
-    Chest,
-}
-
-impl BlockType {
-    pub fn is_opaque(&self) -> bool {
-        match self {
-            BlockType::Air
-            | BlockType::Glass
-            | BlockType::OakLeaves
-            | BlockType::Water
-            | BlockType::Lava
-            | BlockType::Torch
-            | BlockType::Vine => false,
-            _ => true,
-        }
-    }
-
-    pub fn is_fluid(&self) -> bool {
-        matches!(self, BlockType::Water | BlockType::Lava)
-    }
-
-    pub fn is_air(&self) -> bool {
-        matches!(self, BlockType::Air)
-    }
-
-    /// Point light source emission level: Torch = 14, Lava = 15
-    pub fn light_emission(&self) -> u8 {
-        match self {
-            BlockType::Lava => 15,
-            BlockType::Torch => 14,
-            _ => 0,
-        }
-    }
-
-    /// Whether light can pass through this block: Air, Glass, Water, Leaves, Torch
-    pub fn is_transparent_for_light(&self) -> bool {
-        match self {
-            BlockType::Air
-            | BlockType::Glass
-            | BlockType::Water
-            | BlockType::Torch
-            | BlockType::OakLeaves
-            | BlockType::Vine => true,
-            _ => false,
-        }
-    }
-}
+/// Supported Minecraft Block Types (aliased to canonical BlockId)
+pub use crate::world::block_registry::BlockId;
+pub type BlockType = BlockId;
 
 /// Normalized UV sub-rectangle inside the Texture Atlas [u_min, v_min, u_max, v_max]
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -184,12 +119,74 @@ impl TextureAtlas {
                         "oak_log",
                         "oak_log_top",
                         "oak_leaves",
+                        "birch_planks",
+                        "birch_log",
+                        "birch_log_top",
+                        "birch_leaves",
+                        "spruce_planks",
+                        "spruce_log",
+                        "spruce_log_top",
+                        "spruce_leaves",
+                        "dark_oak_planks",
+                        "dark_oak_log",
+                        "dark_oak_log_top",
+                        "dark_oak_leaves",
+                        "andesite",
+                        "granite",
+                        "diorite",
+                        "gravel",
+                        "coal_ore",
+                        "iron_ore",
+                        "copper_ore",
+                        "gold_ore",
+                        "diamond_ore",
+                        "redstone_ore",
+                        "lapis_ore",
+                        "emerald_ore",
                         "bedrock",
                         "sand",
                         "glass",
                         "bricks",
                         "obsidian",
                         "vine",
+                        "netherrack",
+                        "soul_sand",
+                        "soul_soil",
+                        "basalt_top",
+                        "basalt_side",
+                        "polished_basalt_top",
+                        "polished_basalt_side",
+                        "blackstone_top",
+                        "blackstone",
+                        "nether_bricks",
+                        "glowstone",
+                        "crimson_nylium",
+                        "crimson_nylium_side",
+                        "warped_nylium",
+                        "warped_nylium_side",
+                        "crimson_stem",
+                        "crimson_stem_top",
+                        "warped_stem",
+                        "warped_stem_top",
+                        "nether_wart_block",
+                        "warped_wart_block",
+                        "crying_obsidian",
+                        "bone_block_side",
+                        "bone_block_top",
+                        "magma",
+                        "end_stone",
+                        "end_stone_bricks",
+                        "purpur_block",
+                        "purpur_pillar",
+                        "purpur_pillar_top",
+                        "end_rod",
+                        "end_portal_frame_top",
+                        "end_portal_frame_side",
+                        "chorus_plant",
+                        "chorus_flower",
+                        "nether_portal",
+                        "end_portal",
+                        "dragon_head",
                         "destroy_stage_0",
                         "destroy_stage_1",
                         "destroy_stage_2",
@@ -226,7 +223,7 @@ impl TextureAtlas {
 
     /// Provides fallback 16x16 textures if texture is missing or jar cannot be opened
     fn ensure_fallbacks(sprites: &mut HashMap<String, RgbaImage>) {
-        let palette: [(&str, [u8; 4]); 24] = [
+        let palette: &[(&str, [u8; 4])] = &[
             ("grass_block_top", [86, 175, 49, 255]),
             ("grass_block_side", [106, 140, 60, 255]),
             ("dirt", [134, 96, 67, 255]),
@@ -238,6 +235,30 @@ impl TextureAtlas {
             ("oak_log", [103, 82, 49, 255]),
             ("oak_log_top", [166, 138, 88, 255]),
             ("oak_leaves", [60, 140, 30, 255]),
+            ("birch_planks", [196, 178, 133, 255]),
+            ("birch_log", [215, 215, 210, 255]),
+            ("birch_log_top", [190, 175, 140, 255]),
+            ("birch_leaves", [80, 150, 45, 255]),
+            ("spruce_planks", [114, 84, 52, 255]),
+            ("spruce_log", [59, 41, 24, 255]),
+            ("spruce_log_top", [95, 75, 48, 255]),
+            ("spruce_leaves", [45, 95, 45, 255]),
+            ("dark_oak_planks", [66, 43, 20, 255]),
+            ("dark_oak_log", [54, 38, 21, 255]),
+            ("dark_oak_log_top", [75, 55, 33, 255]),
+            ("dark_oak_leaves", [35, 80, 25, 255]),
+            ("andesite", [130, 130, 130, 255]),
+            ("granite", [150, 100, 90, 255]),
+            ("diorite", [185, 185, 185, 255]),
+            ("gravel", [120, 115, 115, 255]),
+            ("coal_ore", [40, 40, 40, 255]),
+            ("iron_ore", [180, 150, 130, 255]),
+            ("copper_ore", [190, 110, 80, 255]),
+            ("gold_ore", [220, 190, 60, 255]),
+            ("diamond_ore", [80, 220, 220, 255]),
+            ("redstone_ore", [220, 40, 40, 255]),
+            ("lapis_ore", [30, 70, 180, 255]),
+            ("emerald_ore", [40, 200, 80, 255]),
             ("bedrock", [40, 40, 40, 255]),
             ("sand", [219, 207, 154, 255]),
             ("glass", [200, 220, 255, 120]),
@@ -250,6 +271,44 @@ impl TextureAtlas {
             ("chest_top", [160, 115, 60, 255]),
             ("chest_side", [150, 105, 55, 255]),
             ("chest_front", [140, 95, 50, 255]),
+            ("netherrack", [110, 35, 35, 255]),
+            ("soul_sand", [80, 60, 50, 255]),
+            ("soul_soil", [75, 55, 45, 255]),
+            ("basalt_top", [80, 80, 85, 255]),
+            ("basalt_side", [50, 50, 55, 255]),
+            ("polished_basalt_top", [90, 90, 95, 255]),
+            ("polished_basalt_side", [70, 70, 75, 255]),
+            ("blackstone", [40, 35, 42, 255]),
+            ("blackstone_top", [45, 40, 48, 255]),
+            ("nether_bricks", [45, 20, 25, 255]),
+            ("glowstone", [220, 180, 100, 255]),
+            ("crimson_nylium", [140, 25, 30, 255]),
+            ("crimson_nylium_side", [120, 30, 35, 255]),
+            ("warped_nylium", [25, 115, 110, 255]),
+            ("warped_nylium_side", [30, 90, 85, 255]),
+            ("crimson_stem", [100, 25, 45, 255]),
+            ("crimson_stem_top", [125, 40, 65, 255]),
+            ("warped_stem", [45, 95, 95, 255]),
+            ("warped_stem_top", [60, 120, 120, 255]),
+            ("nether_wart_block", [120, 10, 15, 255]),
+            ("warped_wart_block", [20, 130, 120, 255]),
+            ("crying_obsidian", [40, 20, 60, 255]),
+            ("bone_block_side", [225, 220, 200, 255]),
+            ("bone_block_top", [215, 210, 190, 255]),
+            ("magma", [180, 50, 10, 255]),
+            ("end_stone", [220, 220, 160, 255]),
+            ("end_stone_bricks", [215, 215, 155, 255]),
+            ("purpur_block", [168, 122, 168, 255]),
+            ("purpur_pillar", [175, 130, 175, 255]),
+            ("purpur_pillar_top", [160, 115, 160, 255]),
+            ("end_rod", [230, 230, 230, 255]),
+            ("end_portal_frame_top", [90, 130, 110, 255]),
+            ("end_portal_frame_side", [115, 135, 115, 255]),
+            ("chorus_plant", [95, 55, 95, 255]),
+            ("chorus_flower", [220, 180, 220, 255]),
+            ("nether_portal", [148, 60, 220, 180]),
+            ("end_portal", [15, 10, 25, 255]),
+            ("dragon_head", [35, 35, 40, 255]),
             ("missing", [255, 0, 255, 255]),
         ];
 
@@ -390,6 +449,46 @@ impl TextureAtlas {
                 _ => "oak_log",
             },
             BlockType::OakLeaves => "oak_leaves",
+
+            BlockType::BirchPlanks => "birch_planks",
+            BlockType::BirchLog => match face {
+                Direction::Up | Direction::Down => "birch_log_top",
+                _ => "birch_log",
+            },
+            BlockType::BirchLeaves => "birch_leaves",
+
+            BlockType::SprucePlanks => "spruce_planks",
+            BlockType::SpruceLog => match face {
+                Direction::Up | Direction::Down => "spruce_log_top",
+                _ => "spruce_log",
+            },
+            BlockType::SpruceLeaves => "spruce_leaves",
+
+            BlockType::DarkOakPlanks => "dark_oak_planks",
+            BlockType::DarkOakLog => match face {
+                Direction::Up | Direction::Down => "dark_oak_log_top",
+                _ => "dark_oak_log",
+            },
+            BlockType::DarkOakLeaves => "dark_oak_leaves",
+
+            BlockType::Andesite => "andesite",
+            BlockType::Granite => "granite",
+            BlockType::Diorite => "diorite",
+            BlockType::Gravel => "gravel",
+
+            BlockType::CoalOre => "coal_ore",
+            BlockType::IronOre => "iron_ore",
+            BlockType::CopperOre => "copper_ore",
+            BlockType::GoldOre => "gold_ore",
+            BlockType::DiamondOre => "diamond_ore",
+            BlockType::RedstoneOre => "redstone_ore",
+            BlockType::LapisOre => "lapis_ore",
+            BlockType::EmeraldOre => "emerald_ore",
+
+            BlockType::OakSlab | BlockType::OakStairs => "oak_planks",
+            BlockType::StoneSlab => "stone",
+            BlockType::CobblestoneSlab | BlockType::CobblestoneStairs => "cobblestone",
+
             BlockType::Bedrock => "bedrock",
             BlockType::Sand => "sand",
             BlockType::Glass => "glass",
@@ -404,6 +503,69 @@ impl TextureAtlas {
                 Direction::North => "chest_front",
                 _ => "chest_side",
             },
+
+            BlockType::Netherrack => "netherrack",
+            BlockType::SoulSand => "soul_sand",
+            BlockType::SoulSoil => "soul_soil",
+            BlockType::Basalt => match face {
+                Direction::Up | Direction::Down => "basalt_top",
+                _ => "basalt_side",
+            },
+            BlockType::PolishedBasalt => match face {
+                Direction::Up | Direction::Down => "polished_basalt_top",
+                _ => "polished_basalt_side",
+            },
+            BlockType::Blackstone => match face {
+                Direction::Up | Direction::Down => "blackstone_top",
+                _ => "blackstone",
+            },
+            BlockType::NetherBricks => "nether_bricks",
+            BlockType::Glowstone => "glowstone",
+            BlockType::CrimsonNylium => match face {
+                Direction::Up => "crimson_nylium",
+                Direction::Down => "netherrack",
+                _ => "crimson_nylium_side",
+            },
+            BlockType::WarpedNylium => match face {
+                Direction::Up => "warped_nylium",
+                Direction::Down => "netherrack",
+                _ => "warped_nylium_side",
+            },
+            BlockType::CrimsonStem => match face {
+                Direction::Up | Direction::Down => "crimson_stem_top",
+                _ => "crimson_stem",
+            },
+            BlockType::WarpedStem => match face {
+                Direction::Up | Direction::Down => "warped_stem_top",
+                _ => "warped_stem",
+            },
+            BlockType::NetherWartBlock => "nether_wart_block",
+            BlockType::WarpedWartBlock => "warped_wart_block",
+            BlockType::CryingObsidian => "crying_obsidian",
+            BlockType::BoneBlock => match face {
+                Direction::Up | Direction::Down => "bone_block_top",
+                _ => "bone_block_side",
+            },
+            BlockType::MagmaBlock => "magma",
+
+            BlockType::EndStone => "end_stone",
+            BlockType::EndStoneBricks => "end_stone_bricks",
+            BlockType::PurpurBlock | BlockType::PurpurSlab | BlockType::PurpurStairs => "purpur_block",
+            BlockType::PurpurPillar => match face {
+                Direction::Up | Direction::Down => "purpur_pillar_top",
+                _ => "purpur_pillar",
+            },
+            BlockType::EndRod => "end_rod",
+            BlockType::EndPortalFrame => match face {
+                Direction::Up => "end_portal_frame_top",
+                Direction::Down => "end_stone",
+                _ => "end_portal_frame_side",
+            },
+            BlockType::ChorusPlant => "chorus_plant",
+            BlockType::ChorusFlower => "chorus_flower",
+            BlockType::NetherPortal => "nether_portal",
+            BlockType::EndPortal => "end_portal",
+            BlockType::DragonHead => "dragon_head",
         };
 
         self.get_sprite(sprite_name).to_array()

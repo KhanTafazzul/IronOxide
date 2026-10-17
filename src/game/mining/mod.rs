@@ -14,19 +14,10 @@ use crate::render::atlas::{BlockType, Direction};
 
 /// Returns the vanilla block hardness value (-1.0 for unbreakable)
 pub fn get_block_hardness(block: BlockType) -> f32 {
-    match block {
-        BlockType::Air => 0.0,
-        BlockType::Bedrock => -1.0, // Unbreakable
-        BlockType::Dirt | BlockType::GrassBlock | BlockType::Sand => 0.5,
-        BlockType::Stone => 1.5,
-        BlockType::Cobblestone | BlockType::Bricks => 2.0,
-        BlockType::OakLog | BlockType::OakPlanks | BlockType::Chest => 2.0,
-        BlockType::Deepslate => 3.0,
-        BlockType::OakLeaves | BlockType::Vine => 0.2,
-        BlockType::Glass => 0.3,
-        BlockType::Torch => 0.0,
-        BlockType::Lava | BlockType::Water => -1.0,
-        BlockType::Obsidian => 50.0,
+    if block.is_fluid() {
+        -1.0
+    } else {
+        block.hardness()
     }
 }
 

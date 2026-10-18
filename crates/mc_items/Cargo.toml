@@ -1,0 +1,13 @@
+[package]
+name = "mc_items"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Comprehensive ItemId registry and tool/armor tier attributes for Minecraft 1.20.4 and 1.21"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"], optional = true }
+
+[features]
+default = []
+serde = ["dep:serde"]

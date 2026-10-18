@@ -1,0 +1,15 @@
+[package]
+name = "mc_gameplay"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Interactive workstations engine: Crafting Table, Furnace, Anvil, Smithing Table, and Stonecutter"
+
+[dependencies]
+mc_items = { path = "../mc_items" }
+mc_crafting = { path = "../mc_crafting" }
+serde = { version = "1.0", features = ["derive"], optional = true }
+
+[features]
+default = []
+serde = ["dep:serde"]

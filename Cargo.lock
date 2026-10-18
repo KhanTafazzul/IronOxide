@@ -1407,6 +1407,7 @@ version = "0.1.0"
 dependencies = [
  "mc_crafting",
  "mc_items",
+ "serde",
 ]
 
 [[package]]

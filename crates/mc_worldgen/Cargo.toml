@@ -1,0 +1,8 @@
+[package]
+name = "mc_worldgen"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Deterministic 1:1 seed-for-seed terrain, biome, and cave noise generator for Minecraft 1.20.4"
+
+[dependencies]

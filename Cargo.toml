@@ -5,6 +5,15 @@ edition = "2024"
 license = "GPL-3.0-or-later"
 description = "A high-performance Minecraft client and voxel engine reverse-engineered in Rust using WGPU and WGSL"
 
+[workspace]
+members = [
+    ".",
+    "crates/mc_items",
+    "crates/mc_crafting",
+    "crates/mc_gameplay",
+    "crates/mc_worldgen",
+]
+
 [dependencies]
 bytemuck = "1.25.2"
 flate2 = "1.1"
@@ -16,8 +25,8 @@ rodio = "0.23.0"
 wgpu = "30.0.1"
 winit = "0.30.13"
 zip = "9.0.4"
-mc_worldgen = { path = "../crates/mc_worldgen" }
-mc_items = { path = "../crates/mc_items" }
-mc_crafting = { path = "../crates/mc_crafting" }
-mc_gameplay = { path = "../crates/mc_gameplay" }
+mc_worldgen = { path = "crates/mc_worldgen" }
+mc_items = { path = "crates/mc_items" }
+mc_crafting = { path = "crates/mc_crafting" }
+mc_gameplay = { path = "crates/mc_gameplay" }
 

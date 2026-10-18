@@ -3,8 +3,8 @@
 
 > **Project Goal**: Re-implement Minecraft 1.20.4 client and voxel engine from scratch in **Rust** using **WGPU** and **WGSL** shaders by reverse-engineering `client.jar` using decompilation and exact vanilla algorithms.
 >
-> **Status**: **216 / 216 Unit & Integration Tests Passing (173 in IronOxide, 30 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
-> **Last Updated**: Tasks 1 through 40 Fully Completed & Verified.
+> **Status**: **222 / 222 Unit & Integration Tests Passing (173 in IronOxide, 36 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
+> **Last Updated**: Tasks 1 through 41 Fully Completed & Verified.
 
 ---
 
@@ -47,6 +47,7 @@
 | **Task 38: Dynamic Weather & Accumulation Tick** | `src/world/weather.rs` | Done | Global cycle timers (12k..168k clear, 12k..24k rain), 50-tick smooth fades, altitude lapse rate, freezing water $\rightarrow$ ice, snow layer accumulation (1..8) & light level $> 11$ thawing |
 | **Task 39: 3D Noise Cave Carvers & Canyons** | `crates/mc_worldgen/src/carvers/` | Done | Cheese caves (3D cavern bubbles), Spaghetti caves ($\sqrt{N_1^2 + N_2^2} < r$ tunnels), Noodle caves (high-freq ridge passages), Canyons (steep 112-step ravines, yScale=3.0), replaceable block rules & bedrock protection |
 | **Task 40: Local Aquifers & Fluid Flooding** | `crates/mc_worldgen/src/aquifers/` | Done | 16x40x16 cell grid sampler, target fluid levels & spread, $Y < -54$ water $\rightarrow$ lava transition, cavity fluid backfilling, barrier noise stone dams preventing leaks & preserving dry air pockets |
+| **Task 41: Surface Rule Engine & Biome Strata** | `crates/mc_worldgen/src/surface/` | Done | AST rule evaluation (`AbovePreliminarySurface`, `WaterCheck`, `Biome`, `YCheck`, `All`, `Any`, `Not`), standard strata (GrassBlock/Dirt/Stone/Deepslate), underwater/beaches (Sand/Sandstone), desert (deep Sand/Sandstone), badlands (terracotta banding & red sand), mountain peaks (Stone/Gravel/SnowBlock) |
 
 
 
@@ -744,9 +745,32 @@ When resuming next, execution will start directly from **Task 33**:
 
 ---
 
+### Task 41: Surface Rule Engine & Biome Strata
+- **Modules**: `crates/mc_worldgen/src/surface/` (`ast.rs`, `rules.rs`, `mod.rs`), `crates/mc_worldgen/src/lib.rs`
+- **Reverse-Engineered References**:
+  - `net.minecraft.world.level.levelgen.SurfaceRules` (`dph.class`)
+  - `net.minecraft.world.level.levelgen.SurfaceSystem` (`dpi.class`)
+  - `net.minecraft.data.worldgen.SurfaceRuleData` (`pr.class`)
+- **Key Implementations**:
+  - **Rule AST Evaluation Engine**:
+    - `Condition::AbovePreliminarySurface`: Evaluates `stone_depth_above <= offset` (with surface depth noise modulation).
+    - `Condition::WaterCheck`: Checks if block is under sea level / water table (`y <= water_height + offset`).
+    - `Condition::Biome`: Applies biome-specific strata rules matching current `BiomeId`.
+    - Additional AST predicates: `YCheck`, `Steep`, `Not`, `All`, `Any`.
+    - `SurfaceRule` AST nodes: `Block(SurfaceBlock)`, `If { condition, then_rule }`, `Sequence(Vec<SurfaceRule>)`, `BandTerracotta(TerracottaBands)`.
+  - **Core Surface Behaviors**:
+    - **Standard Overworld (Plains, Forests, etc.)**: 1 layer `GrassBlock` on exposed surface ($Y \ge 63$) over 3-4 layers `Dirt` over `Stone` (above $Y=0$) and `Deepslate` (below $Y=0$).
+    - **Underwater / Beaches**: 3-4 layers `Sand` over `Sandstone` over base `Stone`.
+    - **Deserts**: Deep `Sand` (depth $\le 4$) over `Sandstone` (depth $\le 8$).
+    - **Badlands / Mesa**: Multi-colored horizontal terracotta banding determined by deterministic Y-level noise (`TerracottaBands`), with `RedSand` and `RedSandstone` in valleys below $Y \le 65$.
+    - **Mountain Peaks (Frozen, Jagged, Stony)**: Exposed `Stone` and `Gravel` in Stony Peaks; `SnowBlock` surface over `PackedIce` over `Stone` in Frozen and Jagged Peaks.
+    - **Bedrock Floor**: Strict unbreakable `Bedrock` floor at $Y \le -60$.
+
+---
+
 ## 🧪 Test Suite & Verification Status
 
-**Total: 216 / 216 Unit & Integration Tests Passing (0 Failed, 0 Ignored)**
+**Total: 222 / 222 Unit & Integration Tests Passing (0 Failed, 0 Ignored)**
 
 * **`IronOxide` Core (173 tests)**:
   - Physics & AABB decoupled movement: 6 tests
@@ -766,7 +790,7 @@ When resuming next, execution will start directly from **Task 33**:
   - ECS, zombie pathfinding, & humanoid models: 12 tests
   - Survival hunger, saturation, & damage vitals: 6 tests
   - Container tile entities & chest screens: 4 tests
-* **`crates/mc_worldgen` (30 tests)**:
+* **`crates/mc_worldgen` (36 tests)**:
   - JVM PRNG & Stafford13 seed derivation parity: 1 test
   - Full Overworld biome registration & roundtrip: 1 test
   - Biome climate categories & parameter points: 1 test
@@ -789,6 +813,12 @@ When resuming next, execution will start directly from **Task 33**:
   - Barrier noise leak prevention & dry cavern dams: 1 test
   - Natural unflooded dry cave pockets & water/lava aquifers: 1 test
   - Bedrock immunity in aquifer substance evaluation: 1 test
+  - Surface AST condition evaluation (`AbovePreliminarySurface`, `WaterCheck`, `Biome`, `All`, `Not`): 1 test
+  - Standard strata (GrassBlock over Dirt over Stone / Deepslate): 1 test
+  - Underwater and beach strata (Sand over Sandstone): 1 test
+  - Desert strata (deep Sand and Sandstone): 1 test
+  - Badlands mesa strata and terracotta banding: 1 test
+  - Mountain peaks strata (exposed Stone, Gravel, SnowBlock, PackedIce): 1 test
 * **`crates/mc_items` (5 tests)**:
   - Complete 1,329+ `ItemId` name roundtrip: 1 test
   - Tool tier attributes (durability, attack damage, speed): 2 tests

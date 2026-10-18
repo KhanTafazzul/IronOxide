@@ -5,7 +5,7 @@ High-Performance Voxel Game Engine and Minecraft Client Architecture in Rust
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Language: Rust 2024](https://img.shields.io/badge/Language-Rust_2024-orange.svg)](https://www.rust-lang.org/)
 [![Graphics: WGPU](https://img.shields.io/badge/Graphics-WGPU_/_WGSL-green.svg)](https://wgpu.rs/)
-[![Tests: 216 Passing](https://img.shields.io/badge/Tests-216_Passed-brightgreen.svg)]()
+[![Tests: 222 Passing](https://img.shields.io/badge/Tests-222_Passed-brightgreen.svg)]()
 
 ---
 
@@ -130,6 +130,13 @@ The engine achieves deterministic behavioral fidelity with the vanilla Java edit
   * **Elevation Fluid Switching**: Below $Y < -54$, fluid strictly transitions from `Water` to `Lava`, generating deep molten cavern floors; secondary deep lava noise triggers lava pools below $Y \le -10$.
   * **Barrier Noise Stone Dams**: Asymmetric vertical pressure calculation and `aquifer_barrier` noise prevent fluids from leaking into adjacent dry air pockets, generating impermeable natural dividing stone and deepslate rock barriers.
   * **Bedrock Immunity**: Enforces absolute bedrock immunity at $Y \le -60$, ensuring bedrock boundaries are never replaced with fluid.
+* **Surface Rule Engine & Biome Strata (`mc_worldgen::surface`)**:
+  * **AST Rule Evaluator**: High-performance AST representation matching vanilla `SurfaceRules` (`dph.class`) with composable `Condition` nodes (`AbovePreliminarySurface`, `WaterCheck`, `Biome`, `YCheck`, `Steep`, `Not`, `All`, `Any`) and `SurfaceRule` actions (`Block`, `If`, `Sequence`, `BandTerracotta`).
+  * **Standard Biome Strata**: Topmost 1 layer `GrassBlock` over 3-4 layers `Dirt` over solid `Stone` / `Deepslate` (transitioning at $Y \le 0$).
+  * **Underwater & Beaches**: Top 3-4 layers of `Sand` transitioning into solid `Sandstone` beneath water level ($Y \le 63$).
+  * **Deserts**: Deep 5+ layers of `Sand` over `Sandstone` strata.
+  * **Badlands / Mesa Banding**: Deterministic 192-layer horizontal terracotta banding matching `SurfaceSystem` (`dpi.class`) with `RedSand` in low-lying valleys.
+  * **Mountain Peaks**: Exposed `Stone`, `Gravel`, and high-altitude `SnowBlock` / `PackedIce` crests.
 
 ### 5. Portals and Dimensional Transit
 * **Nether Portal Mechanics**:
@@ -246,7 +253,7 @@ IronOxide/
 # Verify compilation across all workspace crates
 cargo check --workspace
 
-# Execute the test suite (204 automated unit and integration tests)
+# Execute the test suite (222 automated unit and integration tests)
 cargo test --workspace
 
 # Build and run the client in optimized release mode
@@ -275,7 +282,7 @@ cargo run --release
 
 ## Automated Verification Suite
 
-The repository contains 204 automated unit and integration tests across the workspace verifying engine correctness, numerical stability, and format compliance:
+The repository contains 222 automated unit and integration tests across the workspace verifying engine correctness, numerical stability, and format compliance:
 
 ```text
 running 173 tests in IronOxide
@@ -285,24 +292,30 @@ test world::weather::tests::test_snow_and_ice_thawing_under_light ... ok
 ...
 test result: ok. 173 passed; 0 failed; 0 ignored; finished in 7.46s
 
-running 30 tests in mc_worldgen
-test test_surface_rules_badlands_banded_terracotta ... ok
-test test_concentric_rings_stronghold_placement ... ok
-test test_chunk_parity_seed_123456789 ... ok
-test test_cheese_caves_cavern_density ... ok
-test test_spaghetti_caves_3d_and_2d ... ok
-test test_noodle_caves_claustrophobic_tunnels ... ok
-test test_canyon_carver_generation_and_shape ... ok
-test test_bedrock_never_carved ... ok
-test test_carve_block_replacement_rules ... ok
+running 36 tests in mc_worldgen
+test test_surface_rule_ast_conditions ... ok
+test test_standard_surface_strata_grass_dirt_stone ... ok
+test test_underwater_and_beach_sand_strata ... ok
+test test_desert_deep_sand_strata ... ok
+test test_badlands_terracotta_banding_and_red_sand ... ok
+test test_mountain_peaks_exposed_stone_gravel_snow ... ok
 test test_aquifer_grid_cell_partitioning ... ok
 test test_aquifer_fluid_type_elevation_switching_lava_below_minus_54 ... ok
 test test_aquifer_flooding_logic_backfills_carved_space ... ok
 test test_barrier_noise_prevents_leaking_and_creates_dry_pockets ... ok
 test test_aquifer_unflooded_dry_pockets ... ok
 test test_aquifer_bedrock_immunity ... ok
+test test_cheese_caves_cavern_density ... ok
+test test_spaghetti_caves_3d_and_2d ... ok
+test test_noodle_caves_claustrophobic_tunnels ... ok
+test test_canyon_carver_generation_and_shape ... ok
+test test_bedrock_never_carved ... ok
+test test_carve_block_replacement_rules ... ok
+test test_surface_rules_badlands_banded_terracotta ... ok
+test test_concentric_rings_stronghold_placement ... ok
+test test_chunk_parity_seed_123456789 ... ok
 ...
-test result: ok. 30 passed; 0 failed; 0 ignored; finished in 0.38s
+test result: ok. 36 passed; 0 failed; 0 ignored; finished in 0.42s
 
 running 5 tests in mc_gameplay
 test test_crafting_table_preview_craft_and_auto_drop ... ok

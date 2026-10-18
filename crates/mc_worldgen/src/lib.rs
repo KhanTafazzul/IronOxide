@@ -3,6 +3,9 @@ pub mod biomes;
 pub mod carvers;
 pub mod seed_pipeline;
 pub mod structures;
+pub mod surface;
+
+pub use surface::{build_overworld_rules, Condition, SurfaceContext, SurfaceRule, SurfaceSystem};
 
 pub use aquifers::{
     grid_x, grid_y, grid_z, Aquifer, AquiferFluidType, AquiferGridSampler, AquiferSubstance,

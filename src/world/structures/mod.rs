@@ -7,3 +7,8 @@ pub use jigsaw::{
     PlacedPiece, PlainsVillageGenerator, Rotation, StructureBlock, StructureTemplate,
     WoodlandMansionGenerator,
 };
+pub use mc_worldgen::structures::{
+    ChunkPos, ConcentricRingsPlacement, LegacyRandom, RandomSpreadPlacement, SpreadType,
+    StructureLocator, StructureRoot, StructureType,
+};
+

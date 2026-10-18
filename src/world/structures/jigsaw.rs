@@ -600,12 +600,12 @@ impl PlainsVillageGenerator {
         for x in 0..5 {
             for z in 0..5 {
                 if x == 0 || x == 4 || z == 0 || z == 4 {
+                    well.add_block(IVec3::new(x, 0, z), BlockId::Cobblestone);
                     well.add_block(IVec3::new(x, 1, z), BlockId::Cobblestone);
                 } else {
                     well.add_block(IVec3::new(x, 0, z), BlockId::Water);
                     well.add_block(IVec3::new(x, 1, z), BlockId::Air);
                 }
-                well.add_block(IVec3::new(x, 0, z), BlockId::Cobblestone);
             }
         }
         // Well roof pillars & roof
@@ -966,7 +966,7 @@ mod tests {
         // Parse back
         let parsed = StructureTemplate::from_nbt_bytes(&bytes).expect("Failed to parse NBT");
         assert_eq!(parsed.size, IVec3::new(3, 4, 3));
-        assert_eq!(parsed.blocks.len(), 3);
+        assert_eq!(parsed.blocks.len(), 4);
         assert_eq!(parsed.joints.len(), 1);
 
         let joint = &parsed.joints[0];

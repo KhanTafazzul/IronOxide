@@ -1,5 +1,8 @@
 pub mod nether;
+pub mod overworld;
 pub mod the_end;
+
+pub use overworld::OverworldGenerator;
 
 pub use nether::{
     hash_coords, NetherBiome, NetherGenerator, NetherGeneratorConfig, NETHER_LAVA_LEVEL,

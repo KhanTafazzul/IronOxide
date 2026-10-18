@@ -139,3 +139,106 @@ fn test_chunk_parity_seed_123456789() {
     ];
     assert_eq!(heightmap_10_neg5, expected_10_neg5);
 }
+
+#[test]
+fn test_noise_router_15_functions_and_density_parity() {
+    use mc_worldgen::{NoiseRouter, OverworldGenerator};
+
+    let world_seed = 123456789i64;
+    let generator = OverworldGenerator::new(world_seed);
+    let router = NoiseRouter::new(world_seed);
+
+    // 1. Verify all 15 vanilla noise router functions produce valid samples
+    let x = 0.0;
+    let y = 64.0;
+    let z = 0.0;
+
+    // Aquifers
+    let barrier = router.barrier(x, y, z);
+    let floodedness = router.fluid_level_floodedness(x, y, z);
+    let spread = router.fluid_level_spread(x, y, z);
+    let lava_noise = router.lava(x, y, z);
+    assert!(!barrier.is_nan());
+    assert!(!floodedness.is_nan());
+    assert!(!spread.is_nan());
+    assert!(!lava_noise.is_nan());
+
+    // Fluid levels: below -54 is Lava, below 63 is Water
+    assert_eq!(router.aquifer_fluid_at(-60), "minecraft:lava");
+    assert_eq!(router.aquifer_fluid_at(0), "minecraft:water");
+    assert_eq!(router.aquifer_fluid_at(70), "minecraft:air");
+
+    // Climate & continental shaping
+    let temp = router.temperature(x, y, z);
+    let veg = router.vegetation(x, y, z);
+    let cont = router.continents(x, y, z);
+    let ero = router.erosion(x, y, z);
+    let depth = router.depth(x, y, z);
+    let ridges = router.ridges(x, y, z);
+    assert!(!temp.is_nan());
+    assert!(!veg.is_nan());
+    assert!(!cont.is_nan());
+    assert!(!ero.is_nan());
+    assert!(!depth.is_nan());
+    assert!(!ridges.is_nan());
+
+    // 3D Cave Routers
+    let sponge = router.caves_sponge(x, y, z, 1.0);
+    let sp_2d = router.caves_spaghetti_2d(x, y, z);
+    let sp_rough = router.caves_spaghetti_roughness(x, y, z);
+    let noodle = router.caves_noodle(x, y, z);
+    assert!(!sponge.is_nan());
+    assert!(!sp_2d.is_nan());
+    assert!(!sp_rough.is_nan());
+    assert!(!noodle.is_nan());
+
+    // Shaping & final density
+    let init_dens = router.initial_density_without_jaggedness(x, y, z);
+    let final_dens = router.final_density(x, y, z, 1.0);
+    assert!(!init_dens.is_nan());
+    assert!(!final_dens.is_nan());
+
+    // Ore vein channels
+    let vein_toggle = router.vein_toggle(x, y, z);
+    let vein_ridged = router.vein_ridged(x, y, z);
+    let vein_gap = router.vein_gap(x, y, z);
+    assert!(!vein_toggle.is_nan());
+    assert!(!vein_ridged.is_nan());
+    assert!(!vein_gap.is_nan());
+
+    // 2. Parity Test: Chunk (0, 0) density at Y=64 (surface ground) and Y=-32 (deepslate cave void)
+    let d64 = generator.calculate_density(0, 64, 0);
+    let d_neg32 = generator.calculate_density(0, -32, 0);
+
+    println!("Seed 123456789 chunk (0,0) density at Y=64 (surface): {}", d64);
+    println!("Seed 123456789 chunk (0,0) density at Y=-32 (deepslate cave void): {}", d_neg32);
+
+    // Surface at Y=64 is solid ground (density > 0)
+    assert!(
+        d64 > 0.0,
+        "Surface ground at Y=64 must have positive density, got {}",
+        d64
+    );
+
+    // Deepslate cave void at Y=-32 is carved by cave generators (density < 0)
+    assert!(
+        d_neg32 < 0.0,
+        "Deepslate cave void at Y=-32 must have negative density, got {}",
+        d_neg32
+    );
+
+    // 3. Trilinear interpolation section density verification
+    // Section Y=4 corresponds to blocks [64, 80)
+    let section_surface = generator.generate_section_density(0, 4, 0);
+    assert_eq!(section_surface.chunk_x, 0);
+    assert_eq!(section_surface.section_y, 4);
+    assert_eq!(section_surface.chunk_z, 0);
+    assert!(section_surface.is_solid(0, 0, 0));
+
+    // Section Y=-2 corresponds to blocks [-32, -16)
+    let section_deepslate = generator.generate_section_density(0, -2, 0);
+    assert_eq!(section_deepslate.chunk_x, 0);
+    assert_eq!(section_deepslate.section_y, -2);
+    assert_eq!(section_deepslate.chunk_z, 0);
+    assert!(!section_deepslate.is_solid(0, 0, 0)); // carved void
+}

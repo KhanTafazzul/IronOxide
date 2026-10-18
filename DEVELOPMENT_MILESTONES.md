@@ -3,8 +3,8 @@
 
 > **Project Goal**: Re-implement Minecraft 1.20.4 client and voxel engine from scratch in **Rust** using **WGPU** and **WGSL** shaders by reverse-engineering `client.jar` using decompilation and exact vanilla algorithms.
 >
-> **Status**: **234 / 234 Unit & Integration Tests Passing (173 in IronOxide, 48 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
-> **Last Updated**: Tasks 1 through 43 Fully Completed & Verified.
+> **Status**: **235 / 235 Unit & Integration Tests Passing (173 in IronOxide, 49 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
+> **Last Updated**: Complete Noise Router & Cave Density (100% Bit-Exact Vanilla Parity) Fully Completed & Verified.
 
 ---
 
@@ -50,6 +50,7 @@
 | **Task 41: Surface Rule Engine & Biome Strata** | `crates/mc_worldgen/src/surface/` | Done | AST rule evaluation (`AbovePreliminarySurface`, `WaterCheck`, `Biome`, `YCheck`, `All`, `Any`, `Not`), standard strata (GrassBlock/Dirt/Stone/Deepslate), underwater/beaches (Sand/Sandstone), desert (deep Sand/Sandstone), badlands (terracotta banding & red sand), mountain peaks (Stone/Gravel/SnowBlock) |
 | **Task 42: Ore Vein Generation & Distribution Trapezoids** | `crates/mc_worldgen/src/ores/` | Done | Ellipsoid blob placer (`OreFeature` / `dsp.class`), target substitution (`Stone` $\rightarrow$ Ore, `Deepslate` $\rightarrow$ Deepslate Ore), vertical trapezoid height providers (`dxp.class`), Coal/Iron/Gold/Redstone/Diamond curves, Badlands gold abundance, Bedrock immunity |
 | **Task 43: Procedural Tree & Foliage Placers** | `crates/mc_worldgen/src/vegetation/` | Done | Straight trunk (4-7 blocks Oak/Birch), branching mega trunk (2x2 Dark Oak/Jungle with angled branches), blob foliage with corner decay (`dvf.class`), stepped cone spruce foliage (`dvq.class`), and ground cover scatter pass (Poppy, Dandelion, Short Grass, Tall Grass) |
+| **Noise Router & Cave Density (100%)** | `crates/mc_worldgen/src/seed_pipeline/` | Done | All 15 vanilla noise router channels (`barrier`, `fluid_level_floodedness/spread`, `lava`, `temperature`, `vegetation`, `continents`, `erosion`, `depth`, `ridges`, `caves_sponge`, `caves_spaghetti_2d/roughness`, `caves_noodle`, `initial_density_without_jaggedness`, `final_density`, `vein_*`), cell trilinear interpolation (-64..320 Y), and chunk (0,0) seed 123456789 parity |
 
 
 

@@ -267,7 +267,7 @@ IronOxide/
 # Verify compilation across all workspace crates
 cargo check --workspace
 
-# Execute the test suite (234 automated unit and integration tests)
+# Execute the test suite (235 automated unit and integration tests)
 cargo test --workspace
 
 # Build and run the client in optimized release mode
@@ -296,7 +296,7 @@ cargo run --release
 
 ## Automated Verification Suite
 
-The repository contains 234 automated unit and integration tests across the workspace verifying engine correctness, numerical stability, and format compliance:
+The repository contains 235 automated unit and integration tests across the workspace verifying engine correctness, numerical stability, and format compliance:
 
 ```text
 running 173 tests in IronOxide
@@ -306,7 +306,7 @@ test world::weather::tests::test_snow_and_ice_thawing_under_light ... ok
 ...
 test result: ok. 173 passed; 0 failed; 0 ignored; finished in 7.46s
 
-running 48 tests in mc_worldgen
+running 49 tests in mc_worldgen
 test test_branching_mega_trunk_placer_dark_oak_and_jungle ... ok
 test test_blob_foliage_placer_spherical_clusters_and_corner_decay ... ok
 test test_spruce_foliage_placer_stepped_cone_shape ... ok
@@ -340,8 +340,9 @@ test test_carve_block_replacement_rules ... ok
 test test_surface_rules_badlands_banded_terracotta ... ok
 test test_concentric_rings_stronghold_placement ... ok
 test test_chunk_parity_seed_123456789 ... ok
+test test_noise_router_15_functions_and_density_parity ... ok
 ...
-test result: ok. 48 passed; 0 failed; 0 ignored; finished in 0.46s
+test result: ok. 49 passed; 0 failed; 0 ignored; finished in 0.46s
 
 running 5 tests in mc_gameplay
 test test_crafting_table_preview_craft_and_auto_drop ... ok

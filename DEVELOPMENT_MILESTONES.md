@@ -3,8 +3,8 @@
 
 > **Project Goal**: Re-implement Minecraft 1.20.4 client and voxel engine from scratch in **Rust** using **WGPU** and **WGSL** shaders by reverse-engineering `client.jar` using decompilation and exact vanilla algorithms.
 >
-> **Status**: **228 / 228 Unit & Integration Tests Passing (173 in IronOxide, 42 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
-> **Last Updated**: Tasks 1 through 42 Fully Completed & Verified.
+> **Status**: **234 / 234 Unit & Integration Tests Passing (173 in IronOxide, 48 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
+> **Last Updated**: Tasks 1 through 43 Fully Completed & Verified.
 
 ---
 
@@ -49,6 +49,7 @@
 | **Task 40: Local Aquifers & Fluid Flooding** | `crates/mc_worldgen/src/aquifers/` | Done | 16x40x16 cell grid sampler, target fluid levels & spread, $Y < -54$ water $\rightarrow$ lava transition, cavity fluid backfilling, barrier noise stone dams preventing leaks & preserving dry air pockets |
 | **Task 41: Surface Rule Engine & Biome Strata** | `crates/mc_worldgen/src/surface/` | Done | AST rule evaluation (`AbovePreliminarySurface`, `WaterCheck`, `Biome`, `YCheck`, `All`, `Any`, `Not`), standard strata (GrassBlock/Dirt/Stone/Deepslate), underwater/beaches (Sand/Sandstone), desert (deep Sand/Sandstone), badlands (terracotta banding & red sand), mountain peaks (Stone/Gravel/SnowBlock) |
 | **Task 42: Ore Vein Generation & Distribution Trapezoids** | `crates/mc_worldgen/src/ores/` | Done | Ellipsoid blob placer (`OreFeature` / `dsp.class`), target substitution (`Stone` $\rightarrow$ Ore, `Deepslate` $\rightarrow$ Deepslate Ore), vertical trapezoid height providers (`dxp.class`), Coal/Iron/Gold/Redstone/Diamond curves, Badlands gold abundance, Bedrock immunity |
+| **Task 43: Procedural Tree & Foliage Placers** | `crates/mc_worldgen/src/vegetation/` | Done | Straight trunk (4-7 blocks Oak/Birch), branching mega trunk (2x2 Dark Oak/Jungle with angled branches), blob foliage with corner decay (`dvf.class`), stepped cone spruce foliage (`dvq.class`), and ground cover scatter pass (Poppy, Dandelion, Short Grass, Tall Grass) |
 
 
 
@@ -795,11 +796,30 @@ When resuming next, execution will start directly from **Task 33**:
   - Complete Overworld ore decoration generator with 48-bit Java LCG feature seeds, coordinating multi-pass vein placement across 16x16 chunk columns.
   - Biome-sensitive filtering guaranteeing Badlands extra gold generation.
 
+### 21. Procedural Tree & Foliage Placers (Task 43)
+- **Target Classes Reverse-Engineered from `client.jar`**:
+  - `net.minecraft.world.level.levelgen.feature.trunkplacers.StraightTrunkPlacer` (`dxb.class`)
+  - `net.minecraft.world.level.levelgen.feature.trunkplacers.FancyTrunkPlacer` (`dwx.class`)
+  - `net.minecraft.world.level.levelgen.feature.trunkplacers.DarkOakTrunkPlacer` (`dww.class`)
+  - `net.minecraft.world.level.levelgen.feature.trunkplacers.MegaJungleTrunkPlacer` (`dxa.class`)
+  - `net.minecraft.world.level.levelgen.feature.foliageplacers.BlobFoliagePlacer` (`dvf.class`)
+  - `net.minecraft.world.level.levelgen.feature.foliageplacers.SpruceFoliagePlacer` (`dvq.class`)
+- **Trunk Generation (`crates/mc_worldgen/src/vegetation/trunk.rs`)**:
+  - `StraightTrunkPlacer`: Vertical 1x1 log column of height 4-7 blocks, dirt placement beneath base, single apex foliage attachment point.
+  - `BranchingMegaTrunkPlacer`: 2x2 thick log footprint with dirt placed beneath all 4 corners, angled branches branching upward and outward from the upper canopy, emitting multiple attachment points (summit + branch tips).
+- **Foliage Placement (`crates/mc_worldgen/src/vegetation/foliage.rs`)**:
+  - `BlobFoliagePlacer`: Spherical leaf clusters with outer corner decaying probability ($\approx 50\%$ skip chance, guaranteed top layer decay) matching `dvf.class`.
+  - `SpruceFoliagePlacer`: Stepped conical evergreen canopy with oscillating stepped radii ($0 \rightarrow 1, 0 \rightarrow 1 \rightarrow 2, 1 \rightarrow 2 \rightarrow 3$) tapering toward the apex.
+- **Ground Cover Scatter Pass (`crates/mc_worldgen/src/vegetation/ground_cover.rs`)**:
+  - Deterministic chunk scatter pass using `GROUND_COVER_SALT = 4729103` distributing `ShortGrass` (~70%), `TallGrass` (~15%), `Poppy` (~7.5%), and `Dandelion` (~7.5%) across surface `GrassBlock` tiles.
+- **Tree Orchestrator (`crates/mc_worldgen/src/vegetation/tree.rs`)**:
+  - Species support: Oak, Birch, Spruce, Dark Oak, and Mega Jungle with appropriate log/leaf block types and soil qualification.
+
 ---
 
 ## 🧪 Test Suite & Verification Status
 
-**Total: 228 / 228 Unit & Integration Tests Passing (0 Failed, 0 Ignored)**
+**Total: 234 / 234 Unit & Integration Tests Passing (0 Failed, 0 Ignored)**
 
 * **`IronOxide` Core (173 tests)**:
   - Physics & AABB decoupled movement: 6 tests
@@ -819,7 +839,7 @@ When resuming next, execution will start directly from **Task 33**:
   - ECS, zombie pathfinding, & humanoid models: 12 tests
   - Survival hunger, saturation, & damage vitals: 6 tests
   - Container tile entities & chest screens: 4 tests
-* **`crates/mc_worldgen` (42 tests)**:
+* **`crates/mc_worldgen` (48 tests)**:
   - JVM PRNG & Stafford13 seed derivation parity: 1 test
   - Full Overworld biome registration & roundtrip: 1 test
   - Biome climate categories & parameter points: 1 test
@@ -854,6 +874,12 @@ When resuming next, execution will start directly from **Task 33**:
   - Gold distribution & Badlands extra abundance (3x+ gold volume): 1 test
   - Redstone vertical distribution & increasing density toward bottom bedrock: 1 test
   - Diamond triangular distribution peak at bedrock level ($Y = -64$): 1 test
+  - Straight trunk placer (Oak/Birch 4-7 blocks & dirt base conversion): 1 test
+  - Branching mega trunk placer (2x2 Dark Oak/Jungle with angled branches): 1 test
+  - Blob foliage placer (spherical leaf cluster & corner decaying rules): 1 test
+  - Spruce foliage placer (stepped cone tapering evergreen shape): 1 test
+  - Full tree generation (Oak, Birch, Spruce, Dark Oak, Mega Jungle & soil rejection): 1 test
+  - Ground cover scatter pass (Grass, TallGrass, Poppy, Dandelion on valid soil): 1 test
 * **`crates/mc_items` (5 tests)**:
   - Complete 1,329+ `ItemId` name roundtrip: 1 test
   - Tool tier attributes (durability, attack damage, speed): 2 tests

@@ -63,6 +63,9 @@ pub fn is_carver_replaceable(block: SurfaceBlock) -> bool {
         | SurfaceBlock::DeepslateEmeraldOre
         | SurfaceBlock::LapisOre
         | SurfaceBlock::DeepslateLapisOre => true,
+
+        // Non-rock decorations, logs, leaves, vegetation
+        _ => false,
     }
 }
 

@@ -5,6 +5,7 @@ pub mod ores;
 pub mod seed_pipeline;
 pub mod structures;
 pub mod surface;
+pub mod vegetation;
 
 pub use ores::{
     coal_lower_distribution, coal_upper_distribution, diamond_distribution,
@@ -14,6 +15,10 @@ pub use ores::{
     OreBlockAccess, OreGenerator, OreType, OreVeinConfig,
 };
 pub use surface::{build_overworld_rules, Condition, SurfaceContext, SurfaceRule, SurfaceSystem};
+pub use vegetation::{
+    BlobFoliagePlacer, BranchingMegaTrunkPlacer, FoliageAttachment, GroundCoverConfig,
+    GroundCoverPlacer, SpruceFoliagePlacer, StraightTrunkPlacer, TreePlacer, TreeType,
+};
 
 pub use aquifers::{
     grid_x, grid_y, grid_z, Aquifer, AquiferFluidType, AquiferGridSampler, AquiferSubstance,

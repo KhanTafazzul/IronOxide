@@ -55,6 +55,26 @@ pub enum SurfaceBlock {
     DeepslateEmeraldOre,
     LapisOre,
     DeepslateLapisOre,
+
+    // Tree Logs
+    OakLog,
+    BirchLog,
+    SpruceLog,
+    DarkOakLog,
+    JungleLog,
+
+    // Tree Leaves
+    OakLeaves,
+    BirchLeaves,
+    SpruceLeaves,
+    DarkOakLeaves,
+    JungleLeaves,
+
+    // Ground Cover & Flowers
+    Poppy,
+    Dandelion,
+    ShortGrass,
+    TallGrass,
 }
 
 /// Standard sea level in Minecraft 1.20.4.

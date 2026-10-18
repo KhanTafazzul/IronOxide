@@ -1,6 +1,8 @@
+pub mod biomes;
 pub mod seed_pipeline;
 pub mod structures;
 
+pub use biomes::{BiomeCategory, BiomeId, SurfaceBlock, SurfaceRuleEngine, TerracottaBands};
 pub use seed_pipeline::climate::{ClimateSampler, OverworldBiomeRegistry, ParameterPoint, ParameterRange, TargetPoint};
 pub use seed_pipeline::density::{BlendedNoise, CaveNoiseRouter, vertical_density_slider};
 pub use seed_pipeline::noise::{ImprovedNoise, NormalNoise, PerlinNoise};

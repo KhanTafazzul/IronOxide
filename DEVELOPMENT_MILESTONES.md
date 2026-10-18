@@ -3,8 +3,8 @@
 
 > **Project Goal**: Re-implement Minecraft 1.20.4 client and voxel engine from scratch in **Rust** using **WGPU** and **WGSL** shaders by reverse-engineering `client.jar` using decompilation and exact vanilla algorithms.
 >
-> **Status**: **195 / 195 Unit & Integration Tests Passing (170 in IronOxide, 12 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
-> **Last Updated**: Tasks 1 through 36 Fully Completed & Verified.
+> **Status**: **201 / 201 Unit & Integration Tests Passing (170 in IronOxide, 18 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
+> **Last Updated**: Tasks 1 through 37 Fully Completed & Verified.
 
 ---
 
@@ -43,6 +43,7 @@
 | **Task 34: Structure Grid Placement & Concentric Rings** | `crates/mc_worldgen/src/structures/`, `src/world/generator/overworld.rs` | Done | Concentric rings placement (128 strongholds, ring 0 in 1,280-2,816 blocks), random spread placement for 6 structure sets, chunk generation hookup |
 | **Task 35: Item Registry & Automated Recipe Parser** | `crates/mc_items/`, `crates/mc_crafting/` | Done | 1,329+ ItemId enum variants up to 1.21, exact tool/armor tiers, Serde shaped/shapeless deserializer, 822 vanilla recipes from client.jar, O(1) in-memory lookup cache |
 | **Task 36: Interactive Workstations Engine** | `crates/mc_gameplay/src/workstations/` | Done | Crafting table 3x3 with auto-drop, Furnace/Blast/Smoker 20Hz ticking with all vanilla fuels, Anvil repairs & prior work penalty $2^n-1$, Smithing Netherite upgrades & trims, Stonecutter |
+| **Task 37: Full Biome Registry & Surface Rules** | `crates/mc_worldgen/src/biomes/` | Done | Complete Overworld biomes registry (Snowy, Temperate, Arid, Oceans, Caves), SurfaceRuleEngine with Badlands 192-layer banded terracotta, desert sand/sandstone, and snowy stratification |
 
 
 
@@ -626,6 +627,32 @@ When resuming next, execution will start directly from **Task 33**:
     - Armor trim recipes consuming trim templates + armor piece + trim material.
   - **Stonecutter**:
     - Single-ingredient cutting recipes for stone, cobblestone, stone bricks, deepslate, and copper variants into slabs, stairs, walls, and grates.
+
+
+---
+
+### Task 37: Full Biome Registry & Surface Rules
+- **Modules**: `crates/mc_worldgen/src/biomes/`
+- **Reverse-Engineered References**:
+  - `net.minecraft.world.level.biome.Biomes` (`cuv.class`)
+  - `net.minecraft.world.level.biome.OverworldBiomeBuilder` (`cve.class`)
+  - `net.minecraft.world.level.levelgen.SurfaceRules` (`dph.class`)
+  - `net.minecraft.data.worldgen.SurfaceRuleData` (`pr.class`)
+  - `net.minecraft.world.level.levelgen.SurfaceSystem` (`dpi.class`)
+- **Key Implementations**:
+  - **Comprehensive Overworld Biome Registry**:
+    - `BiomeId` covering all 47+ Overworld biomes across Snowy, Cold, Temperate, Wet, Arid, Ocean, and Underground categories.
+    - Bidirectional name resolution (`from_name()` $\leftrightarrow$ `name()`), ecological categorization (`BiomeCategory`), baseline temperature constants, and precipitation status.
+  - **Surface Rule Stratification Engine**:
+    - **Snowy / Cold Biomes**: `SnowBlock` surface for peaks (`FrozenPeaks`, `JaggedPeaks`) with `PackedIce` subsurfaces; `SnowBlock` / `Dirt` for `Grove` / `SnowySlopes`; `GrassBlock` with `SnowLayer` on top at $Y = \text{surface\_y} + 1$ for `SnowyPlains` / `SnowyTaiga`.
+    - **Desert / Beach Biomes**: Top 1–3 layers are `Sand`, subsurface depth 3–4 is `Sandstone`, transitioning to `Stone` / `Deepslate` below.
+    - **Badlands 192-Layer Banded Terracotta**:
+      - Deterministic 192-layer clay bands table matching `dpi.a(RandomSource)` byte-for-byte.
+      - Dynamic layer offset formula: $\text{idx} = (y + \text{round}(\text{offset\_noise} \times 4.0)) \pmod{192}$.
+      - Color banding across uncolored `Terracotta`, `WhiteTerracotta`, `OrangeTerracotta`, `YellowTerracotta`, `BrownTerracotta`, `RedTerracotta`, and `LightGrayTerracotta`.
+      - Valleys below $Y \le 65$ topped with `RedSand` and `RedSandstone`.
+    - **Bedrock & Deepslate**: Unbreakable solid `Bedrock` floor at $Y = -64$ with jagged probabilistic transition up to $Y = -60$; smooth transition to `Deepslate` below $Y = 0$.
+    - **Oceans & Water Bodies**: Water columns filling from ocean floor up to `SEA_LEVEL` ($Y = 63$), with surface `Ice` on `FrozenOcean` / `DeepFrozenOcean`.
 
 ---
 

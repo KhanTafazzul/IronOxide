@@ -3,8 +3,8 @@
 
 > **Project Goal**: Re-implement Minecraft 1.20.4 client and voxel engine from scratch in **Rust** using **WGPU** and **WGSL** shaders by reverse-engineering `client.jar` using decompilation and exact vanilla algorithms.
 >
-> **Status**: **204 / 204 Unit & Integration Tests Passing (173 in IronOxide, 18 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
-> **Last Updated**: Tasks 1 through 38 Fully Completed & Verified.
+> **Status**: **210 / 210 Unit & Integration Tests Passing (173 in IronOxide, 24 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
+> **Last Updated**: Tasks 1 through 39 Fully Completed & Verified.
 
 ---
 
@@ -45,6 +45,7 @@
 | **Task 36: Interactive Workstations Engine** | `crates/mc_gameplay/src/workstations/` | Done | Crafting table 3x3 with auto-drop, Furnace/Blast/Smoker 20Hz ticking with all vanilla fuels, Anvil repairs & prior work penalty $2^n-1$, Smithing Netherite upgrades & trims, Stonecutter |
 | **Task 37: Full Biome Registry & Surface Rules** | `crates/mc_worldgen/src/biomes/` | Done | Complete Overworld biomes registry (Snowy, Temperate, Arid, Oceans, Caves), SurfaceRuleEngine with Badlands 192-layer banded terracotta, desert sand/sandstone, and snowy stratification |
 | **Task 38: Dynamic Weather & Accumulation Tick** | `src/world/weather.rs` | Done | Global cycle timers (12k..168k clear, 12k..24k rain), 50-tick smooth fades, altitude lapse rate, freezing water $\rightarrow$ ice, snow layer accumulation (1..8) & light level $> 11$ thawing |
+| **Task 39: 3D Noise Cave Carvers & Canyons** | `crates/mc_worldgen/src/carvers/` | Done | Cheese caves (3D cavern bubbles), Spaghetti caves ($\sqrt{N_1^2 + N_2^2} < r$ tunnels), Noodle caves (high-freq ridge passages), Canyons (steep 112-step ravines, yScale=3.0), replaceable block rules & bedrock protection |
 
 
 
@@ -680,9 +681,38 @@ When resuming next, execution will start directly from **Task 33**:
 
 ---
 
+### Task 39: 3D Noise Cave Carvers & Canyons
+- **Modules**: `crates/mc_worldgen/src/carvers/` (`config.rs`, `noise_caves.rs`, `canyons.rs`, `world_carver.rs`, `mod.rs`), `crates/mc_worldgen/src/lib.rs`
+- **Reverse-Engineered References**:
+  - `net.minecraft.world.level.levelgen.carver.CarverConfiguration` (`dqo.class`)
+  - `net.minecraft.world.level.levelgen.carver.CaveWorldCarver` (`dqs.class`, `dqv.class`)
+  - `net.minecraft.world.level.levelgen.carver.CanyonWorldCarver` (`dqn.class`)
+  - `net.minecraft.world.level.levelgen.NoiseRouterData` (`doz.class`, `dox.class`)
+  - `#minecraft:overworld_carver_replaceables` tag configuration
+- **Key Implementations**:
+  - **Cheese Caves**:
+    - Evaluates 3D multi-octave cheese noise (`cave_cheese`, firstOctave: -8) modulated by `cave_entrance` (-7) and vertical falloff gradient.
+    - Yields sprawling cavernous voids where 3D density exceeds threshold in elevation band $Y \in [-54, 180]$.
+  - **Spaghetti Caves**:
+    - Evaluates dual orthogonal 3D noise channels (`spaghetti_3d_1` & `spaghetti_3d_2`, firstOctave: -7).
+    - Tunnels carve where radial distance $\sqrt{N_1^2 + N_2^2} < \text{radius}$, with radius modulated by `spaghetti_3d_thickness` (-8).
+    - Incorporates 2D horizontal layer noise (`spaghetti_2d`, firstOctave: -7) and high-frequency perturbation (`spaghetti_roughness`, firstOctave: -5).
+  - **Noodle Caves**:
+    - High-frequency ridge noise evaluation (`noodle_ridge_a` & `noodle_ridge_b`, firstOctave: -7) evaluated at frequency multiplier $8/3 \approx 2.6667$.
+    - Forms claustrophobic, twisting, pipe-like pathways clamped by `noodle_thickness` (-8) and elevation density ramps.
+  - **Canyons / Ravines**:
+    - Procedural 112-step gorge trajectories initialized from chunk seed hashing.
+    - Scaled vertical reach ($yScale = 3.0$), steep cliffside cross-sections, and step-wise horizontal yaw/pitch curvature.
+  - **Carving Rules & Bedrock Protection**:
+    - Replaceable check `is_carver_replaceable()` covering Stone, Deepslate, Granite, Diorite, Andesite, Tuff, Dirt, GrassBlock, Terracotta, Sand, Gravel, and Sandstone.
+    - Replaces solid blocks with `Air` (or `Water` if below `SEA_LEVEL = 63`).
+    - **Strict Bedrock Immunity**: Blocks at $Y \le -60$ (bedrock transition floor) or flagged as `Bedrock` are never carved.
+
+---
+
 ## 🧪 Test Suite & Verification Status
 
-**Total: 204 / 204 Unit & Integration Tests Passing (0 Failed, 0 Ignored)**
+**Total: 210 / 210 Unit & Integration Tests Passing (0 Failed, 0 Ignored)**
 
 * **`IronOxide` Core (173 tests)**:
   - Physics & AABB decoupled movement: 6 tests
@@ -702,7 +732,7 @@ When resuming next, execution will start directly from **Task 33**:
   - ECS, zombie pathfinding, & humanoid models: 12 tests
   - Survival hunger, saturation, & damage vitals: 6 tests
   - Container tile entities & chest screens: 4 tests
-* **`crates/mc_worldgen` (18 tests)**:
+* **`crates/mc_worldgen` (24 tests)**:
   - JVM PRNG & Stafford13 seed derivation parity: 1 test
   - Full Overworld biome registration & roundtrip: 1 test
   - Biome climate categories & parameter points: 1 test
@@ -713,6 +743,12 @@ When resuming next, execution will start directly from **Task 33**:
   - Random spread placement (Villages, Outposts, Temples, Mansions, End Cities): 4 tests
   - Connected chunk structure instantiation: 1 test
   - Direct structure locator: 1 test
+  - Cheese caves cavern density & threshold carving: 1 test
+  - Spaghetti caves 3D intersecting tunnels & 2D horizontal layers: 1 test
+  - Noodle caves high-frequency ridge claustrophobic passages: 1 test
+  - Bedrock immunity & non-carvable barrier protection ($Y \le -60$): 1 test
+  - Replaceable block substitution (Stone/Deepslate/Dirt $\rightarrow$ Air or Water $< 63$): 1 test
+  - Canyon / ravine 112-step trajectory, $yScale = 3.0$ & ellipsoid dimensions: 1 test
 * **`crates/mc_items` (5 tests)**:
   - Complete 1,329+ `ItemId` name roundtrip: 1 test
   - Tool tier attributes (durability, attack damage, speed): 2 tests

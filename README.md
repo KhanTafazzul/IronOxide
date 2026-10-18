@@ -5,7 +5,7 @@ High-Performance Voxel Game Engine and Minecraft Client Architecture in Rust
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Language: Rust 2024](https://img.shields.io/badge/Language-Rust_2024-orange.svg)](https://www.rust-lang.org/)
 [![Graphics: WGPU](https://img.shields.io/badge/Graphics-WGPU_/_WGSL-green.svg)](https://wgpu.rs/)
-[![Tests: 204 Passing](https://img.shields.io/badge/Tests-204_Passed-brightgreen.svg)]()
+[![Tests: 210 Passing](https://img.shields.io/badge/Tests-210_Passed-brightgreen.svg)]()
 
 ---
 
@@ -118,9 +118,12 @@ The engine achieves deterministic behavioral fidelity with the vanilla Java edit
   * Complete registry of all 47+ Overworld biomes across Snowy, Cold, Temperate, Wet, Arid, Ocean, and Cave categories with bidirectional name mapping and temperature/downfall parameters.
   * Deterministic 192-layer Badlands banded terracotta stratification matching vanilla `SurfaceSystem` (`dpi.class`) byte-for-byte with dynamic noise offsets.
   * Desert sand/sandstone subsurface rules, snowy mountain packed ice peaks, and deepslate/bedrock transitions.
-
-
-
+* **3D Noise Cave Carvers & Canyons (`mc_worldgen::carvers`)**:
+  * **Cheese Caves**: Expansive cavern voids generated where 3D multi-octave cheese noise (`cave_cheese`, firstOctave: -8) exceeds threshold in $Y \in [-54, 180]$.
+  * **Spaghetti Caves**: Twisting tunnels formed by evaluating dual orthogonal 3D noise channels ($\sqrt{N_1^2 + N_2^2} < \text{radius}$) combined with 2D horizontal layer noise and roughness perturbation.
+  * **Noodle Caves**: Narrow, claustrophobic high-frequency ridge passages evaluated at frequency multiplier $8/3 \approx 2.6667$.
+  * **Canyons / Ravines**: Procedural 112-step gorge trajectories with vertical scaling ($yScale = 3.0$), steep sidewall cross-sections, and step-wise yaw/pitch path progression.
+  * **Carving Rules & Bedrock Protection**: Substitutes solid terrain (`Stone`, `Deepslate`, `Dirt`, `Terracotta`, `Sand`, `Gravel`, `Sandstone`) with `Air` or `Water` (below `SEA_LEVEL = 63`), strictly guaranteeing **Bedrock immunity** ($Y \le -60$).
 ### 5. Portals and Dimensional Transit
 * **Nether Portal Mechanics**:
   * Arbitrary rectangular obsidian frame validation (from $4 \times 5$ up to $23 \times 23$).
@@ -275,12 +278,18 @@ test world::weather::tests::test_snow_and_ice_thawing_under_light ... ok
 ...
 test result: ok. 173 passed; 0 failed; 0 ignored; finished in 7.46s
 
-running 18 tests in mc_worldgen
+running 24 tests in mc_worldgen
 test test_surface_rules_badlands_banded_terracotta ... ok
 test test_concentric_rings_stronghold_placement ... ok
 test test_chunk_parity_seed_123456789 ... ok
+test test_cheese_caves_cavern_density ... ok
+test test_spaghetti_caves_3d_and_2d ... ok
+test test_noodle_caves_claustrophobic_tunnels ... ok
+test test_canyon_carver_generation_and_shape ... ok
+test test_bedrock_never_carved ... ok
+test test_carve_block_replacement_rules ... ok
 ...
-test result: ok. 18 passed; 0 failed; 0 ignored; finished in 0.08s
+test result: ok. 24 passed; 0 failed; 0 ignored; finished in 0.35s
 
 running 5 tests in mc_gameplay
 test test_crafting_table_preview_craft_and_auto_drop ... ok

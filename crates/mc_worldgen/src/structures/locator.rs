@@ -92,6 +92,25 @@ impl LegacyRandom {
     }
 
     #[inline]
+    pub fn from_chunk_seed(world_seed: i64, chunk_x: i32, chunk_z: i32, salt: i32) -> Self {
+        let s = (chunk_x as i64).wrapping_mul(341873128712)
+            .wrapping_add((chunk_z as i64).wrapping_mul(132897987541))
+            .wrapping_add(world_seed)
+            .wrapping_add(salt as i64);
+        Self::new(s)
+    }
+
+    #[inline]
+    pub fn next_float(&mut self) -> f32 {
+        (self.next(24) as f32) * (1.0 / (1 << 24) as f32)
+    }
+
+    #[inline]
+    pub fn next_int(&mut self, bound: u32) -> i32 {
+        self.next_int_bounded(bound as i32)
+    }
+
+    #[inline]
     pub fn next_double(&mut self) -> f64 {
         let hi = (self.next(26) as i64) << 27;
         let lo = self.next(27) as i64;

@@ -22,6 +22,11 @@ pub use vegetation::{
     BlobFoliagePlacer, BranchingMegaTrunkPlacer, FoliageAttachment, GroundCoverConfig,
     GroundCoverPlacer, SpruceFoliagePlacer, StraightTrunkPlacer, TreePlacer, TreeType,
 };
+pub use features::{
+    AcaciaFoliagePlacer, DarkOakTrunkPlacer, FancyTrunkPlacer, FoliagePlacer, ForkingTrunkPlacer,
+    MegaJungleTrunkPlacer, MegaPineFoliagePlacer, TreeFeature, TreeSpecies, TrunkPlacer,
+    VegetationConfig, VegetationFeature, VegetationPlacementStats,
+};
 
 pub use aquifers::{
     grid_x, grid_y, grid_z, Aquifer, AquiferFluidType, AquiferGridSampler, AquiferSubstance,

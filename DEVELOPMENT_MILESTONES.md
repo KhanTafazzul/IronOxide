@@ -3,8 +3,8 @@
 
 > **Project Goal**: Re-implement Minecraft 1.20.4 client and voxel engine from scratch in **Rust** using **WGPU** and **WGSL** shaders by reverse-engineering `client.jar` using decompilation and exact vanilla algorithms.
 >
-> **Status**: **244 / 244 Unit & Integration Tests Passing (173 in IronOxide, 58 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
-> **Last Updated**: Full Ore Generation & Height Trapezoids (100% Bit-Exact Vanilla Parity) Fully Completed & Verified.
+> **Status**: **253 / 253 Unit & Integration Tests Passing (173 in IronOxide, 67 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
+> **Last Updated**: Procedural Trees & Ground/Aquatic Foliage Placers (100% Bit-Exact Vanilla Parity) Fully Completed & Verified.
 
 ---
 
@@ -49,7 +49,7 @@
 | **Task 40: Local Aquifers & Fluid Flooding** | `crates/mc_worldgen/src/aquifers/` | Done | 16x40x16 cell grid sampler, target fluid levels & spread, $Y < -54$ water $\rightarrow$ lava transition, cavity fluid backfilling, barrier noise stone dams preventing leaks & preserving dry air pockets |
 | **Task 41: Surface Rule Engine & Biome Strata** | `crates/mc_worldgen/src/surface/` | Done | AST rule evaluation (`AbovePreliminarySurface`, `WaterCheck`, `Biome`, `YCheck`, `All`, `Any`, `Not`), standard strata (GrassBlock/Dirt/Stone/Deepslate), underwater/beaches (Sand/Sandstone), desert (deep Sand/Sandstone), badlands (terracotta banding & red sand), mountain peaks (Stone/Gravel/SnowBlock) |
 | **Task 42: Full Ore Generation & Height Trapezoids** | `crates/mc_worldgen/src/features/ores.rs`, `src/ores/` | Done | 100% vanilla ore cluster placements across 17 feature passes (`OreFeature` / `dsp.class`, `OreConfiguration` / `dug.class`, `HeightRangePlacement` / `dyf.class`, `TrapezoidHeightProvider` / `dxp.class`, `UniformHeightProvider` / `dxq.class`). Connected 3D ellipsoid blob placer, rock target swapping (`Stone` $\rightarrow$ Ore, `Deepslate` $\rightarrow$ Deepslate Ore below Y=0), reduced air exposure rules (`discard_chance_on_air_exposure`), Coal (uniform 136..256 & triangular peak Y=96), Iron (triangular Y=16 & high mountain Y=256), Copper (triangular Y=48 & doubled Dripstone Caves size 20), Gold (triangular peak Y=-16 & Badlands extra Y=32..256), Redstone (uniform & linear bedrock ramp), Lapis (triangular peak Y=0 & buried uniform), Diamond (triangular peak at bedrock Y=-64, sizes 4..12 with air discard) |
-| **Task 43: Procedural Tree & Foliage Placers** | `crates/mc_worldgen/src/vegetation/` | Done | Straight trunk (4-7 blocks Oak/Birch), branching mega trunk (2x2 Dark Oak/Jungle with angled branches), blob foliage with corner decay (`dvf.class`), stepped cone spruce foliage (`dvq.class`), and ground cover scatter pass (Poppy, Dandelion, Short Grass, Tall Grass) |
+| **Task 43: Procedural Trees & Foliage Placers (100%)** | `crates/mc_worldgen/src/features/trees.rs`, `src/features/vegetation.rs` | Done | 100% procedural tree placement & ground/aquatic foliage decoration. Trunk placers: `StraightTrunkPlacer` (Oak/Birch), `FancyTrunkPlacer` (Large Oak angled limbs & raycast branches), `MegaJungleTrunkPlacer` (2x2 base + stair-stepping branches), `ForkingTrunkPlacer` (Acacia diagonal splits), `DarkOakTrunkPlacer` (2x2 base with roots & lateral branches). Foliage placers: `BlobFoliagePlacer` (corner decay), `SpruceFoliagePlacer` (stepped conical rings to 1-block tip), `MegaPineFoliagePlacer` (high crown, stepped rings with dx+dz<7 & radius^2 trim), `AcaciaFoliagePlacer` (3 flat umbrella disks with corner trim). Ground & aquatic decoration: Short Grass, Ferns, Poppies, Dandelions, Sunflowers with local noise, Lilypads on water surface, Seagrass & multi-block Kelp columns in water bodies. |
 | **Noise Router & Cave Density (100%)** | `crates/mc_worldgen/src/seed_pipeline/` | Done | All 15 vanilla noise router channels (`barrier`, `fluid_level_floodedness/spread`, `lava`, `temperature`, `vegetation`, `continents`, `erosion`, `depth`, `ridges`, `caves_sponge`, `caves_spaghetti_2d/roughness`, `caves_noodle`, `initial_density_without_jaggedness`, `final_density`, `vein_*`), cell trilinear interpolation (-64..320 Y), and chunk (0,0) seed 123456789 parity |
 
 
@@ -885,10 +885,19 @@ When resuming next, execution will start directly from **Task 33**:
   - Diamond triangular distribution peak at bedrock level ($Y = -64$): 1 test
   - Straight trunk placer (Oak/Birch 4-7 blocks & dirt base conversion): 1 test
   - Branching mega trunk placer (2x2 Dark Oak/Jungle with angled branches): 1 test
+  - Fancy trunk placer (Large Oak angled limbs & raycast branch clusters): 1 test
+  - Mega Jungle trunk placer (2x2 base + stair-stepping branches): 1 test
+  - Forking trunk placer (Acacia diagonal splits in distinct directions): 1 test
+  - Dark Oak trunk placer (2x2 base with upper lean & lateral perimeter branches): 1 test
   - Blob foliage placer (spherical leaf cluster & corner decaying rules): 1 test
   - Spruce foliage placer (stepped cone tapering evergreen shape): 1 test
-  - Full tree generation (Oak, Birch, Spruce, Dark Oak, Mega Jungle & soil rejection): 1 test
+  - Mega Pine foliage placer (high crown, stepped rings, dx+dz<7 & radius^2 trim): 1 test
+  - Acacia foliage placer (3 flat umbrella canopy disks with corner trimming): 1 test
+  - Tree species orchestration (Oak, FancyOak, Birch, Spruce, MegaPine, MegaJungle, Acacia, DarkOak): 1 test
+  - Tree placer full tree generation & soil rejection: 1 test
   - Ground cover scatter pass (Grass, TallGrass, Poppy, Dandelion on valid soil): 1 test
+  - Surface ground vegetation decoration pass (Short Grass, Fern, Poppy, Dandelion, Sunflower): 1 test
+  - Aquatic vegetation pass (Lilypads on water surface, Seagrass & multi-block Kelp columns): 1 test
 * **`crates/mc_items` (5 tests)**:
   - Complete 1,329+ `ItemId` name roundtrip: 1 test
   - Tool tier attributes (durability, attack damage, speed): 2 tests

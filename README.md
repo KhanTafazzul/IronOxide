@@ -5,7 +5,7 @@ High-Performance Voxel Game Engine and Minecraft Client Architecture in Rust
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Language: Rust 2024](https://img.shields.io/badge/Language-Rust_2024-orange.svg)](https://www.rust-lang.org/)
 [![Graphics: WGPU](https://img.shields.io/badge/Graphics-WGPU_/_WGSL-green.svg)](https://wgpu.rs/)
-[![Tests: 244 Passing](https://img.shields.io/badge/Tests-244_Passed-brightgreen.svg)]()
+[![Tests: 253 Passing](https://img.shields.io/badge/Tests-253_Passed-brightgreen.svg)]()
 
 ---
 
@@ -146,11 +146,21 @@ The engine achieves deterministic behavioral fidelity with the vanilla Java edit
     * **Gold**: Uniform $Y = -64..=-32$, and high-abundance Badlands extra $Y = 32..=256$ (50 attempts per chunk column).
     * **Redstone**: Uniform $Y = -64..=15$, lower trapezoid centered at bedrock floor ($Y = -64$) with density increasing toward bottom bedrock.
     * **Diamond**: Triangular distribution from $Y = 16$ down to $Y = -64$ with peak density at bedrock level ($Y = -64$).
-* **Procedural Tree & Foliage Placers (`mc_worldgen::vegetation`)**:
-  * **Straight & Branching Mega Trunks**: Vertical log columns (height 4-7 blocks, Oak/Birch) via `StraightTrunkPlacer` (`dxb.class`) and $2 \times 2$ thick pillars with angled ascending branches (Dark Oak/Mega Jungle) via `BranchingMegaTrunkPlacer` (`dww.class` / `dxa.class`).
-  * **Spherical Blob Foliage**: Multi-layer leaf clusters via `BlobFoliagePlacer` (`dvf.class`) with corner decaying probabilities ($\approx 50\%$ skip chance, guaranteed top layer decay).
-  * **Stepped Conical Spruce Foliage**: Tiered conical evergreen canopies via `SpruceFoliagePlacer` (`dvq.class`) with oscillating stepped radii ($0 \rightarrow 1, 0 \rightarrow 1 \rightarrow 2, 1 \rightarrow 2 \rightarrow 3$) tapering toward the crown.
-  * **Ground Cover Scatter Pass**: Deterministic chunk decoration pass (`GROUND_COVER_SALT = 4729103`) distributing `ShortGrass` (~70%), `TallGrass` (~15%), `Poppy` (~7.5%), and `Dandelion` (~7.5%) across surface `GrassBlock` tiles.
+* **Procedural Trees & Ground / Aquatic Foliage Placers (100%) (`mc_worldgen::features`)**:
+  * **Trunk Placers**:
+    * `StraightTrunkPlacer` (`dxb.class`): Height 4-7 blocks vertical pillars for Oak and Birch.
+    * `FancyTrunkPlacer` (`dwx.class`): Central trunk up to $Y \times 0.618$ with 3-5 angled branch limbs extending outward and upward with foliage attachments at tips.
+    * `MegaJungleTrunkPlacer` (`dxa.class`): $2 \times 2$ thick trunk base (height 12-20 blocks) with stair-stepping branch growth and foliage nodes.
+    * `ForkingTrunkPlacer` (`dwy.class`): Diagonal fork splits in distinct horizontal directions (Acacia).
+    * `DarkOakTrunkPlacer` (`dww.class`): $2 \times 2$ base with upper lean and lateral perimeter root/canopy branches.
+  * **Foliage Placers**:
+    * `BlobFoliagePlacer` (`dvf.class`): Spherical leaf clusters with corner decay ($100\%$ decay on crown layer, $50\%$ decay on lower tiers).
+    * `SpruceFoliagePlacer` (`dvq.class`): Stepped conical foliage rings tapering to a 1-block crown tip.
+    * `MegaPineFoliagePlacer` (`dvn.class`): High crown foliage starting high on trunk with stepped rings, trimmed at $dx + dz \ge 7$ or $dx^2 + dz^2 > r^2$.
+    * `AcaciaFoliagePlacer` (`dve.class`): 3 flat umbrella canopy disks with corner trimming matching vanilla bytecode.
+  * **Ground & Aquatic Decoration Pass**:
+    * Land surface pass distributing `ShortGrass` (~55%), `Fern` (~15%), `Poppy` (~10%), `Dandelion` (~10%), and `Sunflower` (~10%) onto valid `GrassBlock` surfaces using deterministic local noise.
+    * Aquatic pass placing `LilyPad` directly on still surface water, and distributing `Seagrass` and multi-block `Kelp` vertical columns on underwater sand/gravel/dirt beds.
 
 ### 5. Portals and Dimensional Transit
 * **Nether Portal Mechanics**:

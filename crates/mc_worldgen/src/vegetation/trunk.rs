@@ -246,5 +246,6 @@ pub fn is_leaves(block: SurfaceBlock) -> bool {
             | SurfaceBlock::SpruceLeaves
             | SurfaceBlock::DarkOakLeaves
             | SurfaceBlock::JungleLeaves
+            | SurfaceBlock::AcaciaLeaves
     )
 }

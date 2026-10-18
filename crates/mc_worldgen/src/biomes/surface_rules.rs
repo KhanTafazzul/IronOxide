@@ -63,6 +63,7 @@ pub enum SurfaceBlock {
     SpruceLog,
     DarkOakLog,
     JungleLog,
+    AcaciaLog,
 
     // Tree Leaves
     OakLeaves,
@@ -70,12 +71,20 @@ pub enum SurfaceBlock {
     SpruceLeaves,
     DarkOakLeaves,
     JungleLeaves,
+    AcaciaLeaves,
 
     // Ground Cover & Flowers
     Poppy,
     Dandelion,
     ShortGrass,
     TallGrass,
+    Fern,
+    Sunflower,
+
+    // Water & Aquatic Plants
+    LilyPad,
+    Seagrass,
+    Kelp,
 }
 
 /// Standard sea level in Minecraft 1.20+.

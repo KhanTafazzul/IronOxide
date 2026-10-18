@@ -3,8 +3,8 @@
 
 > **Project Goal**: Re-implement Minecraft 1.20.4 client and voxel engine from scratch in **Rust** using **WGPU** and **WGSL** shaders by reverse-engineering `client.jar` using decompilation and exact vanilla algorithms.
 >
-> **Status**: **222 / 222 Unit & Integration Tests Passing (173 in IronOxide, 36 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
-> **Last Updated**: Tasks 1 through 41 Fully Completed & Verified.
+> **Status**: **228 / 228 Unit & Integration Tests Passing (173 in IronOxide, 42 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
+> **Last Updated**: Tasks 1 through 42 Fully Completed & Verified.
 
 ---
 
@@ -48,6 +48,7 @@
 | **Task 39: 3D Noise Cave Carvers & Canyons** | `crates/mc_worldgen/src/carvers/` | Done | Cheese caves (3D cavern bubbles), Spaghetti caves ($\sqrt{N_1^2 + N_2^2} < r$ tunnels), Noodle caves (high-freq ridge passages), Canyons (steep 112-step ravines, yScale=3.0), replaceable block rules & bedrock protection |
 | **Task 40: Local Aquifers & Fluid Flooding** | `crates/mc_worldgen/src/aquifers/` | Done | 16x40x16 cell grid sampler, target fluid levels & spread, $Y < -54$ water $\rightarrow$ lava transition, cavity fluid backfilling, barrier noise stone dams preventing leaks & preserving dry air pockets |
 | **Task 41: Surface Rule Engine & Biome Strata** | `crates/mc_worldgen/src/surface/` | Done | AST rule evaluation (`AbovePreliminarySurface`, `WaterCheck`, `Biome`, `YCheck`, `All`, `Any`, `Not`), standard strata (GrassBlock/Dirt/Stone/Deepslate), underwater/beaches (Sand/Sandstone), desert (deep Sand/Sandstone), badlands (terracotta banding & red sand), mountain peaks (Stone/Gravel/SnowBlock) |
+| **Task 42: Ore Vein Generation & Distribution Trapezoids** | `crates/mc_worldgen/src/ores/` | Done | Ellipsoid blob placer (`OreFeature` / `dsp.class`), target substitution (`Stone` $\rightarrow$ Ore, `Deepslate` $\rightarrow$ Deepslate Ore), vertical trapezoid height providers (`dxp.class`), Coal/Iron/Gold/Redstone/Diamond curves, Badlands gold abundance, Bedrock immunity |
 
 
 
@@ -766,11 +767,39 @@ When resuming next, execution will start directly from **Task 33**:
     - **Mountain Peaks (Frozen, Jagged, Stony)**: Exposed `Stone` and `Gravel` in Stony Peaks; `SnowBlock` surface over `PackedIce` over `Stone` in Frozen and Jagged Peaks.
     - **Bedrock Floor**: Strict unbreakable `Bedrock` floor at $Y \le -60$.
 
+### 20. Ore Vein Generation & Distribution Trapezoids (Task 42)
+- **Target Classes Reverse-Engineered from `client.jar`**:
+  - `net.minecraft.world.level.levelgen.feature.OreFeature` (`dsp.class`)
+  - `net.minecraft.world.level.levelgen.feature.configurations.OreConfiguration` (`dug.class`)
+  - `net.minecraft.world.level.levelgen.heightproviders.TrapezoidHeightProvider` (`dxp.class`)
+  - `net.minecraft.world.level.levelgen.heightproviders.UniformHeightProvider` (`dxq.class`)
+  - `net.minecraft.world.level.levelgen.placement.HeightRangePlacement` (`dyf.class`)
+  - `net.minecraft.data.worldgen.features.OreFeatures` (`qm.class`)
+  - `net.minecraft.data.worldgen.placement.OrePlacements` (`qx.class`)
+- **Ellipsoid Blob Placer (`crates/mc_worldgen/src/ores/blob.rs`)**:
+  - Implements the exact vanilla multi-sphere ellipsoid cluster math from `dsp.class`:
+    * Line segment interpolation between endpoints $(x_1, y_1, z_1)$ and $(x_2, y_2, z_2)$ determined by random angle $\theta \in [0, \pi)$ and radius scaling.
+    * Sinusoidal radius interpolation along vein trajectory: $R(t) = \frac{(\sin(\pi t) + 1.0) \cdot r + 1.0}{2.0}$.
+    * Sub-voxel distance test: $dx^2 + dy^2 + dz^2 < 1.0$.
+  - Connected rock substitution rules:
+    * `SurfaceBlock::Stone` (and sedimentary rocks) $\rightarrow$ Stone Ore (`CoalOre`, `IronOre`, `GoldOre`, `RedstoneOre`, `DiamondOre`, etc.).
+    * `SurfaceBlock::Deepslate` $\rightarrow$ Deepslate Ore (`DeepslateCoalOre`, `DeepslateIronOre`, `DeepslateGoldOre`, `DeepslateRedstoneOre`, `DeepslateDiamondOre`, etc.).
+    * Unbreakable `Bedrock` ($Y \le -60$) and `Air` are strictly preserved (bedrock immunity).
+- **Vertical Distribution Curves (`crates/mc_worldgen/src/ores/distribution.rs`)**:
+  - **Coal**: Upper vein uniform $Y = 136$ to $256$, Lower vein triangular $Y = 0$ to $192$ with peak density at $Y = 96$.
+  - **Iron**: Middle vein triangular $Y = -24$ to $56$ with peak at $Y = 16$; Upper vein triangular $Y = 80$ to $384$ peaking in mountain summits ($Y = 256$); Small vein uniform $Y = -64$ to $72$.
+  - **Gold**: Regular vein uniform $Y = -64$ to $-32$; Extra Badlands / Mesa abundance uniform $Y = 32$ to $256$ (50 attempts per chunk).
+  - **Redstone**: Regular vein uniform $Y = -64$ to $15$; Lower vein trapezoid centered at bedrock floor ($Y = -64$) with density increasing toward bottom bedrock.
+  - **Diamond**: Triangular distribution from $Y = 16$ down to $Y = -64$, with peak density at bedrock level ($Y = -64$).
+- **Chunk Ore Generator (`crates/mc_worldgen/src/ores/vein.rs`)**:
+  - Complete Overworld ore decoration generator with 48-bit Java LCG feature seeds, coordinating multi-pass vein placement across 16x16 chunk columns.
+  - Biome-sensitive filtering guaranteeing Badlands extra gold generation.
+
 ---
 
 ## 🧪 Test Suite & Verification Status
 
-**Total: 222 / 222 Unit & Integration Tests Passing (0 Failed, 0 Ignored)**
+**Total: 228 / 228 Unit & Integration Tests Passing (0 Failed, 0 Ignored)**
 
 * **`IronOxide` Core (173 tests)**:
   - Physics & AABB decoupled movement: 6 tests
@@ -790,7 +819,7 @@ When resuming next, execution will start directly from **Task 33**:
   - ECS, zombie pathfinding, & humanoid models: 12 tests
   - Survival hunger, saturation, & damage vitals: 6 tests
   - Container tile entities & chest screens: 4 tests
-* **`crates/mc_worldgen` (36 tests)**:
+* **`crates/mc_worldgen` (42 tests)**:
   - JVM PRNG & Stafford13 seed derivation parity: 1 test
   - Full Overworld biome registration & roundtrip: 1 test
   - Biome climate categories & parameter points: 1 test
@@ -819,6 +848,12 @@ When resuming next, execution will start directly from **Task 33**:
   - Desert strata (deep Sand and Sandstone): 1 test
   - Badlands mesa strata and terracotta banding: 1 test
   - Mountain peaks strata (exposed Stone, Gravel, SnowBlock, PackedIce): 1 test
+  - Ellipsoid blob placer & connected rock substitution (Stone $\rightarrow$ Ore, Deepslate $\rightarrow$ DeepslateOre): 1 test
+  - Coal vertical distribution curves (Upper uniform & Lower triangular peak at Y=96): 1 test
+  - Iron vertical distribution curves (Middle peak Y=16 & Upper mountain peak Y=256): 1 test
+  - Gold distribution & Badlands extra abundance (3x+ gold volume): 1 test
+  - Redstone vertical distribution & increasing density toward bottom bedrock: 1 test
+  - Diamond triangular distribution peak at bedrock level ($Y = -64$): 1 test
 * **`crates/mc_items` (5 tests)**:
   - Complete 1,329+ `ItemId` name roundtrip: 1 test
   - Tool tier attributes (durability, attack damage, speed): 2 tests

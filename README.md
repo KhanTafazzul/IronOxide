@@ -5,7 +5,7 @@ High-Performance Voxel Game Engine and Minecraft Client Architecture in Rust
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Language: Rust 2024](https://img.shields.io/badge/Language-Rust_2024-orange.svg)](https://www.rust-lang.org/)
 [![Graphics: WGPU](https://img.shields.io/badge/Graphics-WGPU_/_WGSL-green.svg)](https://wgpu.rs/)
-[![Tests: 222 Passing](https://img.shields.io/badge/Tests-222_Passed-brightgreen.svg)]()
+[![Tests: 228 Passing](https://img.shields.io/badge/Tests-228_Passed-brightgreen.svg)]()
 
 ---
 
@@ -137,6 +137,15 @@ The engine achieves deterministic behavioral fidelity with the vanilla Java edit
   * **Deserts**: Deep 5+ layers of `Sand` over `Sandstone` strata.
   * **Badlands / Mesa Banding**: Deterministic 192-layer horizontal terracotta banding matching `SurfaceSystem` (`dpi.class`) with `RedSand` in low-lying valleys.
   * **Mountain Peaks**: Exposed `Stone`, `Gravel`, and high-altitude `SnowBlock` / `PackedIce` crests.
+* **Ore Vein Generation & Distribution Trapezoids (`mc_worldgen::ores`)**:
+  * **Ellipsoid Blob Placer**: Connected multi-sphere cluster placer reverse-engineered from vanilla `OreFeature` (`dsp.class`) utilizing sinusoidal sphere radius interpolation $R(t) = ((\sin(\pi t) + 1.0) \cdot r + 1.0) / 2.0$ and sub-voxel distance evaluation $dx^2 + dy^2 + dz^2 < 1.0$.
+  * **Target Rock Substitution**: Replaces `Stone` / sedimentary rock with stone ore variants, and `Deepslate` with deepslate ore variants; strictly preserves unbreakable `Bedrock` ($Y \le -60$) and `Air`.
+  * **Vertical Trapezoid Height Distributions**: Direct port of `TrapezoidHeightProvider` (`dxp.class`), `UniformHeightProvider` (`dxq.class`), and vanilla placement tables (`qx.class`):
+    * **Coal**: Uniform $Y = 136..=256$, Triangular $Y = 0..=192$ (peak at $Y = 96$).
+    * **Iron**: Middle triangular $Y = -24..=56$ (peak at $Y = 16$), Upper triangular $Y = 80..=384$ (high mountain peak at $Y = 256$), Small uniform $Y = -64..=72$.
+    * **Gold**: Uniform $Y = -64..=-32$, and high-abundance Badlands extra $Y = 32..=256$ (50 attempts per chunk column).
+    * **Redstone**: Uniform $Y = -64..=15$, lower trapezoid centered at bedrock floor ($Y = -64$) with density increasing toward bottom bedrock.
+    * **Diamond**: Triangular distribution from $Y = 16$ down to $Y = -64$ with peak density at bedrock level ($Y = -64$).
 
 ### 5. Portals and Dimensional Transit
 * **Nether Portal Mechanics**:
@@ -253,7 +262,7 @@ IronOxide/
 # Verify compilation across all workspace crates
 cargo check --workspace
 
-# Execute the test suite (222 automated unit and integration tests)
+# Execute the test suite (228 automated unit and integration tests)
 cargo test --workspace
 
 # Build and run the client in optimized release mode
@@ -282,7 +291,7 @@ cargo run --release
 
 ## Automated Verification Suite
 
-The repository contains 222 automated unit and integration tests across the workspace verifying engine correctness, numerical stability, and format compliance:
+The repository contains 228 automated unit and integration tests across the workspace verifying engine correctness, numerical stability, and format compliance:
 
 ```text
 running 173 tests in IronOxide
@@ -292,7 +301,13 @@ test world::weather::tests::test_snow_and_ice_thawing_under_light ... ok
 ...
 test result: ok. 173 passed; 0 failed; 0 ignored; finished in 7.46s
 
-running 36 tests in mc_worldgen
+running 42 tests in mc_worldgen
+test test_diamond_triangular_distribution_peak_at_bedrock ... ok
+test test_coal_vertical_distribution_curves ... ok
+test test_ellipsoid_blob_placer_connected_cluster_and_replacement ... ok
+test test_iron_vertical_distribution_curves ... ok
+test test_redstone_vertical_distribution_density_increasing_toward_bedrock ... ok
+test test_gold_distribution_and_badlands_extra_abundance ... ok
 test test_surface_rule_ast_conditions ... ok
 test test_standard_surface_strata_grass_dirt_stone ... ok
 test test_underwater_and_beach_sand_strata ... ok
@@ -315,7 +330,7 @@ test test_surface_rules_badlands_banded_terracotta ... ok
 test test_concentric_rings_stronghold_placement ... ok
 test test_chunk_parity_seed_123456789 ... ok
 ...
-test result: ok. 36 passed; 0 failed; 0 ignored; finished in 0.42s
+test result: ok. 42 passed; 0 failed; 0 ignored; finished in 0.44s
 
 running 5 tests in mc_gameplay
 test test_crafting_table_preview_craft_and_auto_drop ... ok

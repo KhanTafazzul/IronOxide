@@ -37,6 +37,24 @@ pub enum SurfaceBlock {
     BrownTerracotta,
     RedTerracotta,
     LightGrayTerracotta,
+
+    // Overworld Ore variants
+    CoalOre,
+    DeepslateCoalOre,
+    IronOre,
+    DeepslateIronOre,
+    CopperOre,
+    DeepslateCopperOre,
+    GoldOre,
+    DeepslateGoldOre,
+    RedstoneOre,
+    DeepslateRedstoneOre,
+    DiamondOre,
+    DeepslateDiamondOre,
+    EmeraldOre,
+    DeepslateEmeraldOre,
+    LapisOre,
+    DeepslateLapisOre,
 }
 
 /// Standard sea level in Minecraft 1.20.4.

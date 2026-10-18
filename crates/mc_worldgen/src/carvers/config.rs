@@ -45,6 +45,24 @@ pub fn is_carver_replaceable(block: SurfaceBlock) -> bool {
         | SurfaceBlock::BrownTerracotta
         | SurfaceBlock::RedTerracotta
         | SurfaceBlock::LightGrayTerracotta => true,
+
+        // Ore blocks embedded in rock
+        SurfaceBlock::CoalOre
+        | SurfaceBlock::DeepslateCoalOre
+        | SurfaceBlock::IronOre
+        | SurfaceBlock::DeepslateIronOre
+        | SurfaceBlock::CopperOre
+        | SurfaceBlock::DeepslateCopperOre
+        | SurfaceBlock::GoldOre
+        | SurfaceBlock::DeepslateGoldOre
+        | SurfaceBlock::RedstoneOre
+        | SurfaceBlock::DeepslateRedstoneOre
+        | SurfaceBlock::DiamondOre
+        | SurfaceBlock::DeepslateDiamondOre
+        | SurfaceBlock::EmeraldOre
+        | SurfaceBlock::DeepslateEmeraldOre
+        | SurfaceBlock::LapisOre
+        | SurfaceBlock::DeepslateLapisOre => true,
     }
 }
 

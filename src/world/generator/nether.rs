@@ -651,6 +651,72 @@ impl NetherGenerator {
                             raw_grid[idx] = BlockId::MagmaBlock;
                         }
                     }
+
+                    // 6. Glowstone Ceiling Clusters (dse.class: GlowstoneFeature)
+                    if block == BlockId::Netherrack && y >= 80 && y <= 120 {
+                        let below_idx = idx - 1;
+                        if raw_grid[below_idx] == BlockId::Air {
+                            let h = hash_coords(self.config.seed ^ 0x91024a1, wx, y, wz);
+                            if (h % 37) == 0 {
+                                let cluster_len = 2 + ((h >> 4) % 5) as usize;
+                                for dy in 0..cluster_len {
+                                    if (y as usize) >= dy + 1 {
+                                        let gy_idx = idx - (dy + 1);
+                                        if raw_grid[gy_idx] == BlockId::Air {
+                                            raw_grid[gy_idx] = BlockId::Glowstone;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 7. Weeping Vines hanging from ceilings in Crimson Forest
+                    if biome == NetherBiome::CrimsonForest
+                        && (block == BlockId::Netherrack || block == BlockId::CrimsonNylium)
+                        && y > 35
+                    {
+                        let below_idx = idx - 1;
+                        if raw_grid[below_idx] == BlockId::Air {
+                            let h = hash_coords(self.config.seed ^ 0xee149a, wx, y, wz);
+                            if (h % 23) == 0 {
+                                let vine_len = 3 + ((h >> 4) % 6) as usize;
+                                for dy in 0..vine_len {
+                                    if (y as usize) >= dy + 1 {
+                                        let vy_idx = idx - (dy + 1);
+                                        if raw_grid[vy_idx] == BlockId::Air {
+                                            raw_grid[vy_idx] = BlockId::Vine;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 8. Fire Patches on Exposed Netherrack
+                    if (biome == NetherBiome::NetherWastes || biome == NetherBiome::BasaltDeltas)
+                        && block == BlockId::Netherrack
+                        && y > self.config.lava_level
+                        && y < 120
+                    {
+                        let above_idx = idx + 1;
+                        if raw_grid[above_idx] == BlockId::Air {
+                            let h = hash_coords(self.config.seed ^ 0xf14e082, wx, y, wz);
+                            if (h % 43) == 0 {
+                                raw_grid[above_idx] = BlockId::Lava;
+                            }
+                        }
+                    }
+
+                    // 9. Quartz & Nether Gold Ore Distribution in Netherrack
+                    if block == BlockId::Netherrack && y >= 10 && y <= 118 {
+                        let h_ore = hash_coords(self.config.seed ^ 0x610284, wx, y, wz);
+                        if (h_ore % 29) == 0 {
+                            raw_grid[idx] = BlockId::GoldOre;
+                        } else if (h_ore % 31) == 0 {
+                            raw_grid[idx] = BlockId::CoalOre;
+                        }
+                    }
                 }
             }
         }

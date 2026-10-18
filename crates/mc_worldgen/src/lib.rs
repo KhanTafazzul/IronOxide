@@ -48,6 +48,8 @@ pub use seed_pipeline::random::{
 };
 pub use seed_pipeline::terrain::{ChunkSectionDensity, OverworldGenerator, MAX_Y, MIN_Y, SEA_LEVEL};
 pub use structures::{
-    ChunkPos, ConcentricRingsPlacement, LegacyRandom, RandomSpreadPlacement, SpreadType,
+    BastionRemnantGenerator, BastionType, BuriedTreasureGenerator, ChunkPos,
+    ConcentricRingsPlacement, LegacyRandom, MineshaftGenerator, MineshaftType,
+    NetherFortressGenerator, OceanMonumentGenerator, RandomSpreadPlacement, SpreadType,
     StructureLocator, StructureRoot, StructureType,
 };

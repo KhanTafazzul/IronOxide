@@ -244,6 +244,9 @@ pub enum StructureType {
     NetherFortress,
     BastionRemnant,
     EndCity,
+    Mineshaft,
+    OceanMonument,
+    BuriedTreasure,
 }
 
 impl StructureType {
@@ -256,6 +259,9 @@ impl StructureType {
             StructureType::NetherFortress => "minecraft:fortress",
             StructureType::BastionRemnant => "minecraft:bastion_remnant",
             StructureType::EndCity => "minecraft:end_city",
+            StructureType::Mineshaft => "minecraft:mineshaft",
+            StructureType::OceanMonument => "minecraft:monument",
+            StructureType::BuriedTreasure => "minecraft:buried_treasure",
         }
     }
 }
@@ -298,6 +304,9 @@ pub struct StructureLocator {
     pub nether_fortresses: RandomSpreadPlacement,
     pub bastion_remnants: RandomSpreadPlacement,
     pub end_cities: RandomSpreadPlacement,
+    pub ocean_monuments: RandomSpreadPlacement,
+    pub mineshafts: RandomSpreadPlacement,
+    pub buried_treasures: RandomSpreadPlacement,
 }
 
 impl StructureLocator {
@@ -314,6 +323,9 @@ impl StructureLocator {
         let nether_fortresses = RandomSpreadPlacement::new(27, 4, 30084232, SpreadType::Linear);
         let bastion_remnants = RandomSpreadPlacement::new(27, 4, 30084235, SpreadType::Linear);
         let end_cities = RandomSpreadPlacement::new(20, 11, 10387313, SpreadType::Triangular);
+        let ocean_monuments = RandomSpreadPlacement::new(32, 5, 10387313, SpreadType::Triangular);
+        let mineshafts = RandomSpreadPlacement::new(1, 0, 0, SpreadType::Linear);
+        let buried_treasures = RandomSpreadPlacement::new(1, 0, 0, SpreadType::Linear);
 
         Self {
             world_seed,
@@ -326,6 +338,9 @@ impl StructureLocator {
             nether_fortresses,
             bastion_remnants,
             end_cities,
+            ocean_monuments,
+            mineshafts,
+            buried_treasures,
         }
     }
 
@@ -366,6 +381,10 @@ impl StructureLocator {
 
         if self.end_cities.is_structure_chunk(self.world_seed, chunk_x, chunk_z) {
             structures.push(StructureRoot::new(StructureType::EndCity, pos, 60));
+        }
+
+        if self.ocean_monuments.is_structure_chunk(self.world_seed, chunk_x, chunk_z) {
+            structures.push(StructureRoot::new(StructureType::OceanMonument, pos, 40));
         }
 
         structures

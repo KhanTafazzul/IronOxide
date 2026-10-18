@@ -180,6 +180,16 @@ impl Default for EndGeneratorConfig {
     }
 }
 
+/// Canonical End obsidian pillar configuration
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EndSpike {
+    pub center_x: i32,
+    pub center_z: i32,
+    pub radius: i32,
+    pub height: i32,
+    pub guarded: bool,
+}
+
 /// The End Dimension World Generator
 #[derive(Clone, Debug)]
 pub struct TheEndGenerator {
@@ -413,6 +423,33 @@ impl TheEndGenerator {
         }
     }
 
+    /// Returns the 10 canonical obsidian spike configurations arranged around (0, 0)
+    pub fn get_end_spikes() -> [EndSpike; 10] {
+        let mut spikes = [EndSpike {
+            center_x: 0,
+            center_z: 0,
+            radius: 2,
+            height: 76,
+            guarded: false,
+        }; 10];
+        for i in 0..10 {
+            let angle = (i as f32) * std::f32::consts::TAU / 10.0;
+            let cx = (42.0 * angle.cos()).round() as i32;
+            let cz = (42.0 * angle.sin()).round() as i32;
+            let radius = 2 + (i % 2) as i32;
+            let height = 76 + (i as i32) * 3;
+            let guarded = (i == 3) || (i == 7);
+            spikes[i] = EndSpike {
+                center_x: cx,
+                center_z: cz,
+                radius,
+                height,
+                guarded,
+            };
+        }
+        spikes
+    }
+
     /// Generates full 16x128x16 The End chunk column (8 ChunkSections)
     pub fn generate_chunk_column(&self, chunk_x: i32, chunk_z: i32) -> [ChunkSection; THE_END_SECTIONS_COUNT] {
         let mut sections: [ChunkSection; THE_END_SECTIONS_COUNT] = std::array::from_fn(|i| {
@@ -473,7 +510,137 @@ impl TheEndGenerator {
             }
         }
 
-        // 3. Pack raw grid into the 8 vertical 16x16x16 ChunkSections
+        // 3. Central Island Features Pass: Obsidian Pillars, Exit Fountain, Gateway Portals
+        if chunk_center_dist <= 120.0 {
+            // A. 10 Obsidian Pillars arranged circularly at radius ~42 around (0, 0)
+            let spikes = Self::get_end_spikes();
+            for spike in &spikes {
+                let r_padded = spike.radius + 2;
+                if spike.center_x + r_padded >= world_base_x
+                    && spike.center_x - r_padded < world_base_x + 16
+                    && spike.center_z + r_padded >= world_base_z
+                    && spike.center_z - r_padded < world_base_z + 16
+                {
+                    for local_z in 0..16 {
+                        for local_x in 0..16 {
+                            let wx = world_base_x + local_x as i32;
+                            let wz = world_base_z + local_z as i32;
+                            let dx = wx - spike.center_x;
+                            let dz = wz - spike.center_z;
+                            let dist_sq = dx * dx + dz * dz;
+
+                            if dist_sq <= spike.radius * spike.radius {
+                                for y in 50..=spike.height {
+                                    if (y as usize) < 128 {
+                                        let idx = ((local_z * 16 + local_x) * 128) + y as usize;
+                                        if dx == 0 && dz == 0 && y == spike.height {
+                                            raw_grid[idx] = BlockId::Bedrock;
+                                        } else {
+                                            raw_grid[idx] = BlockId::Obsidian;
+                                        }
+                                    }
+                                }
+                                // End crystal at apex
+                                if dx == 0 && dz == 0 && (spike.height + 1) < 128 {
+                                    let crystal_idx = ((local_z * 16 + local_x) * 128) + (spike.height + 1) as usize;
+                                    raw_grid[crystal_idx] = BlockId::Torch;
+                                }
+                            }
+
+                            // Iron bar / glass protective cage on guarded spikes
+                            if spike.guarded && dx.abs() <= 2 && dz.abs() <= 2 {
+                                for dy in 1..=3 {
+                                    let gy = spike.height + dy;
+                                    if (gy as usize) < 128 {
+                                        let is_wall = dx.abs() == 2 || dz.abs() == 2;
+                                        let is_roof = dy == 3 && dx.abs() <= 2 && dz.abs() <= 2;
+                                        if is_wall || is_roof {
+                                            let cage_idx = ((local_z * 16 + local_x) * 128) + gy as usize;
+                                            raw_grid[cage_idx] = BlockId::Glass;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // B. Exit Fountain Portal at (0, 65, 0)
+            if world_base_x <= 4 && world_base_x + 16 > -4 && world_base_z <= 4 && world_base_z + 16 > -4 {
+                for dz in -4..=4 {
+                    for dx in -4..=4 {
+                        let wx = dx;
+                        let wz = dz;
+                        if wx >= world_base_x && wx < world_base_x + 16 && wz >= world_base_z && wz < world_base_z + 16 {
+                            let lx = (wx - world_base_x) as usize;
+                            let lz = (wz - world_base_z) as usize;
+                            let dist_sq = dx * dx + dz * dz;
+
+                            if dist_sq <= 3 {
+                                // Inner pool: Bedrock base at Y=64, EndPortal at Y=65
+                                let base_idx = ((lz * 16 + lx) * 128) + 64;
+                                raw_grid[base_idx] = BlockId::Bedrock;
+                                let portal_idx = ((lz * 16 + lx) * 128) + 65;
+                                raw_grid[portal_idx] = BlockId::EndPortal;
+                            } else if dist_sq <= 8 {
+                                // Outer raised Bedrock rim
+                                let rim_base = ((lz * 16 + lx) * 128) + 64;
+                                raw_grid[rim_base] = BlockId::Bedrock;
+                                let rim_idx = ((lz * 16 + lx) * 128) + 65;
+                                raw_grid[rim_idx] = BlockId::Bedrock;
+                            }
+                        }
+                    }
+                }
+
+                // Central Bedrock pillar with torch at (0, 0)
+                if world_base_x <= 0 && world_base_x + 16 > 0 && world_base_z <= 0 && world_base_z + 16 > 0 {
+                    let lx = (0 - world_base_x) as usize;
+                    let lz = (0 - world_base_z) as usize;
+                    for py in 65..=68 {
+                        let p_idx = ((lz * 16 + lx) * 128) + py;
+                        raw_grid[p_idx] = BlockId::Bedrock;
+                    }
+                    let torch_idx = ((lz * 16 + lx) * 128) + 69;
+                    raw_grid[torch_idx] = BlockId::Torch;
+                }
+            }
+
+            // C. Gateway Portals at Island Perimeter (radius ~96 blocks)
+            let gateway_coords = [(96, 75, 0), (-96, 75, 0), (0, 75, 96), (0, 75, -96)];
+            for (gx, gy, gz) in gateway_coords {
+                if gx + 2 >= world_base_x
+                    && gx - 2 < world_base_x + 16
+                    && gz + 2 >= world_base_z
+                    && gz - 2 < world_base_z + 16
+                {
+                    for dz in -1i32..=1i32 {
+                        for dx in -1i32..=1i32 {
+                            for dy in -1i32..=1i32 {
+                                let wx = gx + dx;
+                                let wy = gy + dy;
+                                let wz = gz + dz;
+
+                                if wx >= world_base_x && wx < world_base_x + 16 && wz >= world_base_z && wz < world_base_z + 16 && wy >= 0 && wy < 128 {
+                                    let lx = (wx - world_base_x) as usize;
+                                    let lz = (wz - world_base_z) as usize;
+                                    let g_idx = ((lz * 16 + lx) * 128) + wy as usize;
+
+                                    if dx == 0 && dy == 0 && dz == 0 {
+                                        raw_grid[g_idx] = BlockId::EndPortal;
+                                    } else if dx.abs() + dy.abs() + dz.abs() <= 2 {
+                                        raw_grid[g_idx] = BlockId::Bedrock;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Pack raw grid into the 8 vertical 16x16x16 ChunkSections
         for local_z in 0..16 {
             for local_x in 0..16 {
                 for y in 0..128 {
@@ -657,5 +824,72 @@ mod tests {
         // Verify solid center block
         let center_block = world.get_block(IVec3::new(0, 55, 0));
         assert_eq!(center_block, BlockId::EndStone);
+    }
+
+    #[test]
+    fn test_end_obsidian_pillars_and_crystals() {
+        let generator = TheEndGenerator::new(505);
+        let spikes = TheEndGenerator::get_end_spikes();
+        assert_eq!(spikes.len(), 10);
+
+        for (i, spike) in spikes.iter().enumerate() {
+            let dist = ((spike.center_x as f32).powi(2) + (spike.center_z as f32).powi(2)).sqrt();
+            assert!(
+                (dist - 42.0).abs() <= 1.5,
+                "Spike {i} distance {dist} should be ~42 blocks from origin"
+            );
+            assert!(spike.height >= 76 && spike.height <= 103);
+            if i == 3 || i == 7 {
+                assert!(spike.guarded, "Spike {i} should be guarded");
+            }
+        }
+
+        // Generate chunk containing spike 0 (located at (42, 0) -> chunk_x = 2, chunk_z = 0)
+        let chunk_x = spikes[0].center_x / 16;
+        let chunk_z = spikes[0].center_z / 16;
+        let mut world = crate::game::world::World::new();
+        generator.populate_world(&mut world, chunk_x, chunk_z);
+
+        // Check obsidian shaft
+        let shaft_block = world.get_block(IVec3::new(spikes[0].center_x, 60, spikes[0].center_z));
+        assert_eq!(shaft_block, BlockId::Obsidian);
+
+        // Check bedrock cap at height
+        let cap_block = world.get_block(IVec3::new(spikes[0].center_x, spikes[0].height, spikes[0].center_z));
+        assert_eq!(cap_block, BlockId::Bedrock);
+
+        // Check crystal torch above cap
+        let crystal_block = world.get_block(IVec3::new(spikes[0].center_x, spikes[0].height + 1, spikes[0].center_z));
+        assert_eq!(crystal_block, BlockId::Torch);
+    }
+
+    #[test]
+    fn test_end_exit_fountain_and_gateway() {
+        let generator = TheEndGenerator::new(606);
+        let mut world = crate::game::world::World::new();
+
+        // 1. Exit fountain in chunk (0, 0)
+        generator.populate_world(&mut world, 0, 0);
+
+        // Center pillar
+        assert_eq!(world.get_block(IVec3::new(0, 65, 0)), BlockId::Bedrock);
+        assert_eq!(world.get_block(IVec3::new(0, 68, 0)), BlockId::Bedrock);
+        assert_eq!(world.get_block(IVec3::new(0, 69, 0)), BlockId::Torch);
+
+        // Portal basin inner tile
+        assert_eq!(world.get_block(IVec3::new(1, 65, 0)), BlockId::EndPortal);
+        assert_eq!(world.get_block(IVec3::new(1, 64, 0)), BlockId::Bedrock);
+
+        // Outer rim
+        assert_eq!(world.get_block(IVec3::new(2, 65, 1)), BlockId::Bedrock);
+
+        // 2. Gateway portal at (96, 75, 0) spanning chunk boundary (5, 0) and (6, 0)
+        generator.populate_world(&mut world, 5, 0);
+        generator.populate_world(&mut world, 6, 0);
+        assert_eq!(world.get_block(IVec3::new(96, 75, 0)), BlockId::EndPortal);
+        assert_eq!(world.get_block(IVec3::new(96, 74, 0)), BlockId::Bedrock);
+        assert_eq!(world.get_block(IVec3::new(96, 76, 0)), BlockId::Bedrock);
+        assert_eq!(world.get_block(IVec3::new(97, 75, 0)), BlockId::Bedrock);
+        assert_eq!(world.get_block(IVec3::new(95, 75, 0)), BlockId::Bedrock);
     }
 }

@@ -5,7 +5,7 @@ High-Performance Voxel Game Engine and Minecraft Client Architecture in Rust
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Language: Rust 2024](https://img.shields.io/badge/Language-Rust_2024-orange.svg)](https://www.rust-lang.org/)
 [![Graphics: WGPU](https://img.shields.io/badge/Graphics-WGPU_/_WGSL-green.svg)](https://wgpu.rs/)
-[![Tests: 253 Passing](https://img.shields.io/badge/Tests-253_Passed-brightgreen.svg)]()
+[![Tests: 259 Passing](https://img.shields.io/badge/Tests-259_Passed-brightgreen.svg)]()
 
 ---
 
@@ -161,6 +161,15 @@ The engine achieves deterministic behavioral fidelity with the vanilla Java edit
   * **Ground & Aquatic Decoration Pass**:
     * Land surface pass distributing `ShortGrass` (~55%), `Fern` (~15%), `Poppy` (~10%), `Dandelion` (~10%), and `Sunflower` (~10%) onto valid `GrassBlock` surfaces using deterministic local noise.
     * Aquatic pass placing `LilyPad` directly on still surface water, and distributing `Seagrass` and multi-block `Kelp` vertical columns on underwater sand/gravel/dirt beds.
+* **Procedural Structures & Jigsaw Placement (`mc_worldgen::structures`)**:
+  * **Abandoned Mineshaft**: Branching corridor networks from $10 \times 6 \times 10$ central chambers (`MSRoom`), timber support arches placed every 5 blocks (`OakPlanks` and `OakFence` in Normal; `DarkOakPlanks` in Mesa/Badlands), central rail corridors, cobwebs, and chest minecarts.
+  * **Nether Fortress**: $9 \times 6 \times 9$ 4-way bridge crossings (`NeCCS`), spanning parapet bridges, elevated Blaze spawner daises, and multi-tier Nether Wart staircase rooms with soul sand.
+  * **Bastion Remnants**: Full support for 4 canonical Jigsaw starting pools (`TreasureRoom` with $2 \times 2 \times 2$ solid Gold Block treasury, magma cube spawner, loot chests, and lava moat; `HoglinStables` with feeding troughs and pens; `HousingUnits`; `Bridge`).
+  * **Ocean Monument**: $58 \times 58$ stepped prismarine temple rising 22 blocks with 3 Elder Guardian spawn chambers (Penthouse, West Wing, East Wing), sea lantern arrays, and central treasure vault encasing 8 Gold Blocks and sponge storage rooms.
+  * **Buried Treasure**: Coastal chests buried beneath sand and gravel layers.
+* **Nether & The End Dimensional Environmental Passes**:
+  * **Nether**: Glowstone ceiling stalactites ($Y \in [80, 120]$), weeping vines in Crimson Forest ($Y > 35$), fire patches on exposed netherrack, and Quartz & Nether Gold ore veins embedded in Netherrack.
+  * **The End**: 10 circular Obsidian pillars at radius $R \approx 42$ around $(0, 0)$ with heights $Y \in [76, 103]$, bedrock caps, and End Crystals (with iron bar / glass cages on pillars 3 and 7); Exit Fountain portal at $(0, 65, 0)$ with bedrock basin, central column, and End Portal core; and perimeter Gateway Portals at $R \approx 96$ encased in bedrock frames.
 
 ### 5. Portals and Dimensional Transit
 * **Nether Portal Mechanics**:

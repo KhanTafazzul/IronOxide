@@ -160,4 +160,158 @@ fn test_structure_locator_direct() {
     assert!(roots.iter().any(|r| r.structure_type == StructureType::Stronghold));
 }
 
+struct TestWorld {
+    blocks: std::collections::HashMap<(i32, i32, i32), mc_worldgen::SurfaceBlock>,
+}
+
+impl TestWorld {
+    fn new() -> Self {
+        Self {
+            blocks: std::collections::HashMap::new(),
+        }
+    }
+}
+
+impl mc_worldgen::OreBlockAccess for TestWorld {
+    fn get_block(&self, x: i32, y: i32, z: i32) -> mc_worldgen::SurfaceBlock {
+        self.blocks.get(&(x, y, z)).copied().unwrap_or(mc_worldgen::SurfaceBlock::Air)
+    }
+
+    fn set_block(&mut self, x: i32, y: i32, z: i32, block: mc_worldgen::SurfaceBlock) {
+        self.blocks.insert((x, y, z), block);
+    }
+}
+
+#[test]
+fn test_abandoned_mineshaft_procedural_generation() {
+    use mc_worldgen::{MineshaftGenerator, MineshaftType, SurfaceBlock};
+
+    // 1. Normal Mineshaft (Oak wood supports)
+    let mut world = TestWorld::new();
+    let placed = MineshaftGenerator::generate(&mut world, (0, -30, 0), MineshaftType::Normal, 42);
+    assert!(placed >= 50, "Mineshaft must place substantial corridor and room blocks");
+
+    let has_planks = world.blocks.values().any(|&b| b == SurfaceBlock::OakPlanks);
+    let has_fence = world.blocks.values().any(|&b| b == SurfaceBlock::OakFence);
+    let has_rails = world.blocks.values().any(|&b| b == SurfaceBlock::Rail);
+    let has_cobwebs = world.blocks.values().any(|&b| b == SurfaceBlock::Cobweb);
+    let has_chest = world.blocks.values().any(|&b| b == SurfaceBlock::Chest);
+
+    assert!(has_planks, "Mineshaft must place oak planks for support arches");
+    assert!(has_fence, "Mineshaft must place oak fence posts");
+    assert!(has_rails, "Mineshaft must place rail corridors");
+    assert!(has_cobwebs, "Mineshaft must place cobwebs in corridors");
+    assert!(has_chest, "Mineshaft must place chest minecarts");
+
+    // 2. Badlands / Mesa variant (Dark Oak wood supports)
+    let mut mesa_world = TestWorld::new();
+    let mesa_placed = MineshaftGenerator::generate(&mut mesa_world, (100, 40, 100), MineshaftType::Mesa, 99);
+    assert!(mesa_placed >= 50);
+    let has_dark_oak = mesa_world.blocks.values().any(|&b| b == SurfaceBlock::DarkOakPlanks);
+    assert!(has_dark_oak, "Mesa mineshafts must generate with Dark Oak planks");
+}
+
+#[test]
+fn test_nether_fortress_piece_layout() {
+    use mc_worldgen::{NetherFortressGenerator, SurfaceBlock};
+
+    let mut world = TestWorld::new();
+    let placed = NetherFortressGenerator::generate(&mut world, (0, 64, 0), 1337);
+    assert!(placed > 500, "Nether fortress must place a large bridge network");
+
+    // Verify predominant Nether Bricks
+    let brick_count = world.blocks.values().filter(|&&b| b == SurfaceBlock::NetherBricks).count();
+    assert!(brick_count > 400, "Fortress must be constructed from Nether Bricks");
+
+    // Verify Blaze Spawner dais and Nether Wart staircase room
+    let has_spawner = world.blocks.values().any(|&b| b == SurfaceBlock::Spawner);
+    let has_wart = world.blocks.values().any(|&b| b == SurfaceBlock::NetherWart);
+    let has_soul_sand = world.blocks.values().any(|&b| b == SurfaceBlock::SoulSand);
+
+    assert!(has_spawner, "Nether Fortress must feature Blaze spawner dais");
+    assert!(has_wart && has_soul_sand, "Nether Fortress must feature Nether Wart farm room");
+}
+
+#[test]
+fn test_bastion_remnants_jigsaw_starts() {
+    use mc_worldgen::{BastionRemnantGenerator, BastionType, SurfaceBlock};
+
+    // 1. Treasure Room: Central gold block cube, magma spawner, loot chests, and lava moat
+    let mut tr_world = TestWorld::new();
+    let tr_placed = BastionRemnantGenerator::generate_variant(&mut tr_world, (0, 45, 0), BastionType::TreasureRoom);
+    assert!(tr_placed > 200);
+
+    let gold_count = tr_world.blocks.values().filter(|&&b| b == SurfaceBlock::GoldBlock).count();
+    assert!(gold_count >= 8, "Bastion treasure room must contain central gold block cube");
+
+    let has_spawner = tr_world.blocks.values().any(|&b| b == SurfaceBlock::Spawner);
+    let has_chest = tr_world.blocks.values().any(|&b| b == SurfaceBlock::Chest);
+    let has_lava = tr_world.blocks.values().any(|&b| b == SurfaceBlock::Lava);
+    assert!(has_spawner, "Treasure room must contain spawner");
+    assert!(has_chest, "Treasure room must contain loot chests");
+    assert!(has_lava, "Treasure room must contain central lava moat");
+
+    // 2. Hoglin Stables: Pens, blackstone floors
+    let mut hs_world = TestWorld::new();
+    let hs_placed = BastionRemnantGenerator::generate_variant(&mut hs_world, (100, 45, 100), BastionType::HoglinStables);
+    assert!(hs_placed > 100);
+    assert!(hs_world.blocks.values().any(|&b| b == SurfaceBlock::Blackstone));
+
+    // 3. Housing Units: Multi-story residential rooms
+    let mut hu_world = TestWorld::new();
+    let hu_placed = BastionRemnantGenerator::generate_variant(&mut hu_world, (200, 45, 200), BastionType::HousingUnits);
+    assert!(hu_placed > 100);
+    assert!(hu_world.blocks.values().any(|&b| b == SurfaceBlock::PolishedBlackstoneBricks));
+
+    // 4. Fortified Bridge
+    let mut br_world = TestWorld::new();
+    let br_placed = BastionRemnantGenerator::generate_variant(&mut br_world, (300, 45, 300), BastionType::Bridge);
+    assert!(br_placed > 100);
+    assert!(br_world.blocks.values().any(|&b| b == SurfaceBlock::GoldBlock));
+}
+
+#[test]
+fn test_ocean_monument_generation() {
+    use mc_worldgen::{OceanMonumentGenerator, SurfaceBlock};
+
+    let mut world = TestWorld::new();
+    let origin = (0, 30, 0);
+    let placed = OceanMonumentGenerator::generate(&mut world, origin);
+
+    // 1. Pyramid base and chambers footprint
+    assert!(placed > 2000, "Ocean Monument must contain extensive prismarine masonry");
+
+    // 2. Key decorative blocks
+    let has_prismarine = world.blocks.values().any(|&b| b == SurfaceBlock::Prismarine);
+    let has_dark_prismarine = world.blocks.values().any(|&b| b == SurfaceBlock::DarkPrismarine);
+    let has_lanterns = world.blocks.values().any(|&b| b == SurfaceBlock::SeaLantern);
+    assert!(has_prismarine && has_dark_prismarine && has_lanterns);
+
+    // 3. Central Treasure Room: 8 Gold Blocks
+    let gold_count = world.blocks.values().filter(|&&b| b == SurfaceBlock::GoldBlock).count();
+    assert_eq!(gold_count, 8, "Ocean Monument treasure core must contain exactly 8 Gold Blocks");
+
+    // 4. Sponge room
+    let sponge_count = world.blocks.values().filter(|&&b| b == SurfaceBlock::Sponge).count();
+    assert!(sponge_count >= 8, "Ocean Monument must contain sponge storage room");
+
+    // 5. 3 Elder Guardians
+    let guardians = OceanMonumentGenerator::elder_guardian_spawns(origin);
+    assert_eq!(guardians.len(), 3, "Ocean Monument must contain exactly 3 Elder Guardian spawn positions");
+}
+
+#[test]
+fn test_buried_treasure_generation() {
+    use mc_worldgen::{BuriedTreasureGenerator, SurfaceBlock};
+
+    let mut world = TestWorld::new();
+    let placed = BuriedTreasureGenerator::generate(&mut world, (145, 62, -280));
+
+    assert_eq!(placed, 3);
+    assert_eq!(world.blocks.get(&(145, 60, -280)), Some(&SurfaceBlock::Chest));
+    assert_eq!(world.blocks.get(&(145, 61, -280)), Some(&SurfaceBlock::Sand));
+    assert_eq!(world.blocks.get(&(145, 62, -280)), Some(&SurfaceBlock::Sand));
+}
+
+
 

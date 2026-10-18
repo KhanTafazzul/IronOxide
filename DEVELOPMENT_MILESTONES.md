@@ -3,8 +3,8 @@
 
 > **Project Goal**: Re-implement Minecraft 1.20.4 client and voxel engine from scratch in **Rust** using **WGPU** and **WGSL** shaders by reverse-engineering `client.jar` using decompilation and exact vanilla algorithms.
 >
-> **Status**: **253 / 253 Unit & Integration Tests Passing (173 in IronOxide, 67 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
-> **Last Updated**: Procedural Trees & Ground/Aquatic Foliage Placers (100% Bit-Exact Vanilla Parity) Fully Completed & Verified.
+> **Status**: **259 / 259 Unit & Integration Tests Passing (175 in IronOxide, 71 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
+> **Last Updated**: Nether, The End & Jigsaw Structures (100% Bit-Exact Vanilla Parity) Fully Completed & Verified.
 
 ---
 
@@ -50,6 +50,7 @@
 | **Task 41: Surface Rule Engine & Biome Strata** | `crates/mc_worldgen/src/surface/` | Done | AST rule evaluation (`AbovePreliminarySurface`, `WaterCheck`, `Biome`, `YCheck`, `All`, `Any`, `Not`), standard strata (GrassBlock/Dirt/Stone/Deepslate), underwater/beaches (Sand/Sandstone), desert (deep Sand/Sandstone), badlands (terracotta banding & red sand), mountain peaks (Stone/Gravel/SnowBlock) |
 | **Task 42: Full Ore Generation & Height Trapezoids** | `crates/mc_worldgen/src/features/ores.rs`, `src/ores/` | Done | 100% vanilla ore cluster placements across 17 feature passes (`OreFeature` / `dsp.class`, `OreConfiguration` / `dug.class`, `HeightRangePlacement` / `dyf.class`, `TrapezoidHeightProvider` / `dxp.class`, `UniformHeightProvider` / `dxq.class`). Connected 3D ellipsoid blob placer, rock target swapping (`Stone` $\rightarrow$ Ore, `Deepslate` $\rightarrow$ Deepslate Ore below Y=0), reduced air exposure rules (`discard_chance_on_air_exposure`), Coal (uniform 136..256 & triangular peak Y=96), Iron (triangular Y=16 & high mountain Y=256), Copper (triangular Y=48 & doubled Dripstone Caves size 20), Gold (triangular peak Y=-16 & Badlands extra Y=32..256), Redstone (uniform & linear bedrock ramp), Lapis (triangular peak Y=0 & buried uniform), Diamond (triangular peak at bedrock Y=-64, sizes 4..12 with air discard) |
 | **Task 43: Procedural Trees & Foliage Placers (100%)** | `crates/mc_worldgen/src/features/trees.rs`, `src/features/vegetation.rs` | Done | 100% procedural tree placement & ground/aquatic foliage decoration. Trunk placers: `StraightTrunkPlacer` (Oak/Birch), `FancyTrunkPlacer` (Large Oak angled limbs & raycast branches), `MegaJungleTrunkPlacer` (2x2 base + stair-stepping branches), `ForkingTrunkPlacer` (Acacia diagonal splits), `DarkOakTrunkPlacer` (2x2 base with roots & lateral branches). Foliage placers: `BlobFoliagePlacer` (corner decay), `SpruceFoliagePlacer` (stepped conical rings to 1-block tip), `MegaPineFoliagePlacer` (high crown, stepped rings with dx+dz<7 & radius^2 trim), `AcaciaFoliagePlacer` (3 flat umbrella disks with corner trim). Ground & aquatic decoration: Short Grass, Ferns, Poppies, Dandelions, Sunflowers with local noise, Lilypads on water surface, Seagrass & multi-block Kelp columns in water bodies. |
+| **Task 44: Nether, The End & Jigsaw Structures (100%)** | `src/world/generator/nether.rs`, `the_end.rs`, `crates/mc_worldgen/src/structures/` | Done | 100% completion of Nether features (Glowstone ceiling clusters, weeping vines, fire patches, quartz/nether gold ore distribution), The End features (10 circular obsidian pillars with crystals, bedrock tops & iron bar/glass cages, exit fountain with bedrock basin & End Portal core, island perimeter gateway portals), and Jigsaw structures (Abandoned Mineshaft networks, Nether Fortresses, Bastion Remnant starts, Ocean Monuments with 3 Elder Guardians & 8 gold blocks, Buried Treasure) |
 | **Noise Router & Cave Density (100%)** | `crates/mc_worldgen/src/seed_pipeline/` | Done | All 15 vanilla noise router channels (`barrier`, `fluid_level_floodedness/spread`, `lava`, `temperature`, `vegetation`, `continents`, `erosion`, `depth`, `ridges`, `caves_sponge`, `caves_spaghetti_2d/roughness`, `caves_noodle`, `initial_density_without_jaggedness`, `final_density`, `vein_*`), cell trilinear interpolation (-64..320 Y), and chunk (0,0) seed 123456789 parity |
 
 
@@ -898,6 +899,24 @@ When resuming next, execution will start directly from **Task 33**:
   - Ground cover scatter pass (Grass, TallGrass, Poppy, Dandelion on valid soil): 1 test
   - Surface ground vegetation decoration pass (Short Grass, Fern, Poppy, Dandelion, Sunflower): 1 test
   - Aquatic vegetation pass (Lilypads on water surface, Seagrass & multi-block Kelp columns): 1 test
+  - Abandoned Mineshaft procedural generation (supports, cobwebs, rails, chests, Normal and Mesa variants): 1 test
+  - Nether Fortress piece layout (bridges, blaze spawners, nether wart room): 1 test
+  - Bastion Remnants Jigsaw starts (Treasure room with gold core & lava moat, stables, housing, bridge): 1 test
+  - Ocean Monument generation (58x58 pyramid, 3 Elder Guardians, 8 Gold Blocks, sponge storage): 1 test
+  - Buried Treasure generation (coastal buried chest beneath sand): 1 test
+* **`IronOxide` (175 tests)**:
+  - Central Island convex landmass & End biome sampling: 1 test
+  - Void Gap zero density enforcement ($100 \le R < 1000$): 1 test
+  - Outer floating islands & smooth underside parabolic falloff: 1 test
+  - Chorus Plant stochastic branching growth & Chorus Flower tips: 1 test
+  - End chunk column generation & multi-section world population: 1 test
+  - 10 End Obsidian Pillars with crystals, bedrock caps & protective cages: 1 test
+  - End exit fountain portal with bedrock basin, End Portal core, and perimeter Gateway Portals: 1 test
+  - Complete Nether 5 biomes climate points & ambient fog colors: 1 test
+  - Nether closed-box bedrock boundaries ($Y \le 4$ and $Y \ge 123$): 1 test
+  - Nether lava ocean filling cavities below $Y \le 31$: 1 test
+  - Nether chunk column generation with Glowstone clusters, vines, fire, and ores: 1 test
+  - Full Nether multi-section world population: 1 test
 * **`crates/mc_items` (5 tests)**:
   - Complete 1,329+ `ItemId` name roundtrip: 1 test
   - Tool tier attributes (durability, attack damage, speed): 2 tests
@@ -913,6 +932,51 @@ When resuming next, execution will start directly from **Task 33**:
   - Anvil repairs, durability merge bonus, & $2^n-1$ prior work penalty: 1 test
   - Smithing Table Netherite gear upgrades & armor trims: 1 test
   - Stonecutter single-ingredient cutting selection: 1 test
+
+---
+
+### 27. Task 44: Nether, The End & Jigsaw Structures (100% Completion)
+- **Modules**: `src/world/generator/nether.rs`, `src/world/generator/the_end.rs`, `crates/mc_worldgen/src/structures/`
+- **REA Decompiled References**:
+  - `net.minecraft.world.level.levelgen.structure.structures.NetherFortressStructure` (`ekg.class`) & `NetherFortressPieces` (`ejo.class`)
+  - `net.minecraft.world.level.levelgen.structure.structures.OceanMonumentStructure` (`elc.class`) & `OceanMonumentPieces` (`ejq.class`)
+  - `net.minecraft.world.level.levelgen.structure.structures.BuriedTreasureStructure` (`ejk.class`)
+  - `net.minecraft.world.level.levelgen.structure.structures.MineshaftStructure` (`ejn.class`) & `MineshaftPieces` (`dzx.class`)
+  - `net.minecraft.world.level.levelgen.feature.SpikeFeature` (`dxt.class`) & `SpikeConfiguration`
+  - `net.minecraft.world.level.levelgen.feature.EndPodiumFeature` (`dxr.class`)
+  - `net.minecraft.world.level.levelgen.feature.EndGatewayFeature` (`dxp.class`)
+- **Features Implemented**:
+  1. **Abandoned Mineshaft Generation (`mc_worldgen::structures::MineshaftGenerator`)**:
+     - Procedural corridor network branching from central starting rooms ($10 \times 6 \times 10$ `MSRoom`).
+     - Timber support arches placed every 5 blocks (`OakPlanks` + `OakFence` posts in Normal mineshafts; `DarkOakPlanks` in Mesa/Badlands).
+     - Central rail track placement along corridor floors, random cobweb clusters along walls and ceilings, and chest minecarts.
+  2. **Nether Fortress Generation (`mc_worldgen::structures::NetherFortressGenerator`)**:
+     - $9 \times 6 \times 9$ 4-way bridge crossings (`NeCCS`) and spanning bridge corridors with defensive crenellated parapets.
+     - Blaze spawner daises elevated above lava floor pits.
+     - Multi-level staircase rooms housing soul sand soil beds with growing Nether Wart crops.
+  3. **Bastion Remnants Jigsaw Pools (`mc_worldgen::structures::BastionRemnantGenerator`)**:
+     - Complete support for the 4 canonical vanilla starting pools:
+       * `TreasureRoom`: Fortified central vault with surrounding lava moat, $2 \times 2 \times 2$ solid `GoldBlock` treasury core (8 gold blocks), elevated magma cube/piglin spawner, and loot chests.
+       * `HoglinStables`: Sloped feeding ramps, soul sand feeding troughs, and blackstone animal pens.
+       * `HousingUnits`: Multi-story residential unit complex with hollow chambers, intermediate floors, and loot chests.
+       * `Bridge`: Fortified rampart bridge with defensive parapets and embedded gilded gold blocks.
+  4. **Ocean Monument Generation (`mc_worldgen::structures::OceanMonumentGenerator`)**:
+     - $58 \times 58$ stepped prismarine pyramid rising 22 blocks from deep ocean floor.
+     - 3 Elder Guardian spawn chambers: Apex Penthouse, West Wing, and East Wing.
+     - Sea lantern illumination arrays along perimeter and chambers.
+     - Central treasure vault containing an exact $2 \times 2 \times 2$ cube of 8 `GoldBlock`s encased in dark prismarine, surrounded by sponge storage chambers.
+  5. **Buried Treasure Generation (`mc_worldgen::structures::BuriedTreasureGenerator`)**:
+     - Buries loot chests 1-2 blocks beneath coastal beach sand/gravel layers.
+  6. **Finalized Nether Environmental Pass (`src/world/generator/nether.rs`)**:
+     - Glowstone ceiling stalactite clusters hanging downwards ($Y \in [80, 120]$).
+     - Weeping vines in Crimson Forest ($Y > 35$).
+     - Fire patches on exposed surface Netherrack.
+     - Nether Quartz Ore and Nether Gold Ore veins embedded throughout Netherrack strata ($Y \in [10, 118]$).
+  7. **Finalized The End Environmental Pass (`src/world/generator/the_end.rs`)**:
+     - 10 circular Obsidian pillars arranged at radius $R \approx 42$ around $(0, 0)$ with heights $Y \in [76, 103]$, bedrock caps, and End Crystals (torch proxies).
+     - Iron bar / glass protective cages around crystals on pillars 3 and 7.
+     - Exit fountain portal at $(0, 65, 0)$ with bedrock basin, central bedrock column capped with torch/egg, and active `EndPortal` floor core.
+     - Island perimeter Gateway Portals at radius $R \approx 96$ ($Y = 75$) encased in cross bedrock frames.
 
 ---
 

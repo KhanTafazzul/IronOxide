@@ -217,6 +217,41 @@ pub fn redstone_lower_distribution() -> HeightDistribution {
     HeightDistribution::triangular(-96, -32)
 }
 
+/// Copper Regular: Triangular distribution Y = -16 to 112 with peak at Y = 48 (size 10, count 16).
+/// REA Reference: `qx.L` -> `dyf.b(-16, 112)`
+#[inline]
+pub fn copper_regular_distribution() -> HeightDistribution {
+    HeightDistribution::triangular(-16, 112)
+}
+
+/// Copper Dripstone Caves (Large): Triangular distribution Y = -16 to 112 with peak at Y = 48 (size 20).
+/// REA Reference: `qx.M` -> `dyf.b(-16, 112)`
+#[inline]
+pub fn copper_dripstone_distribution() -> HeightDistribution {
+    HeightDistribution::triangular(-16, 112)
+}
+
+/// Gold Regular (Triangular): Triangular distribution Y = -64 to 32 with peak at Y = -16 (size 9).
+/// REA Reference: `qx.x` / `qx.y` -> `dyf.b(-64, 32)`
+#[inline]
+pub fn gold_regular_triangular_distribution() -> HeightDistribution {
+    HeightDistribution::triangular(-64, 32)
+}
+
+/// Lapis Lazuli Regular: Triangular distribution Y = -32 to 32 with peak at Y = 0 (size 7).
+/// REA Reference: `qx.F` -> `dyf.b(-32, 32)`
+#[inline]
+pub fn lapis_regular_distribution() -> HeightDistribution {
+    HeightDistribution::triangular(-32, 32)
+}
+
+/// Lapis Lazuli Buried: Uniform distribution Y = -64 to 64 (size 7).
+/// REA Reference: `qx.G` -> `dyf.a(bottom, 64)`
+#[inline]
+pub fn lapis_buried_distribution() -> HeightDistribution {
+    HeightDistribution::uniform(-64, 64)
+}
+
 /// Diamond: Triangular distribution from Y = 16 down to Y = -64, with peak density at bedrock level (Y = -64).
 /// REA Reference: `qx.B` / `qx.D` -> `dyf.b(aboveBottom(-80), aboveBottom(80))`
 #[inline]

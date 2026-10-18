@@ -5,7 +5,7 @@ High-Performance Voxel Game Engine and Minecraft Client Architecture in Rust
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Language: Rust 2024](https://img.shields.io/badge/Language-Rust_2024-orange.svg)](https://www.rust-lang.org/)
 [![Graphics: WGPU](https://img.shields.io/badge/Graphics-WGPU_/_WGSL-green.svg)](https://wgpu.rs/)
-[![Tests: 234 Passing](https://img.shields.io/badge/Tests-234_Passed-brightgreen.svg)]()
+[![Tests: 244 Passing](https://img.shields.io/badge/Tests-244_Passed-brightgreen.svg)]()
 
 ---
 
@@ -267,7 +267,7 @@ IronOxide/
 # Verify compilation across all workspace crates
 cargo check --workspace
 
-# Execute the test suite (235 automated unit and integration tests)
+# Execute the test suite (244 automated unit and integration tests)
 cargo test --workspace
 
 # Build and run the client in optimized release mode
@@ -296,7 +296,7 @@ cargo run --release
 
 ## Automated Verification Suite
 
-The repository contains 235 automated unit and integration tests across the workspace verifying engine correctness, numerical stability, and format compliance:
+The repository contains 244 automated unit and integration tests across the workspace verifying engine correctness, numerical stability, and format compliance:
 
 ```text
 running 173 tests in IronOxide
@@ -306,7 +306,7 @@ test world::weather::tests::test_snow_and_ice_thawing_under_light ... ok
 ...
 test result: ok. 173 passed; 0 failed; 0 ignored; finished in 7.46s
 
-running 49 tests in mc_worldgen
+running 58 tests in mc_worldgen
 test test_branching_mega_trunk_placer_dark_oak_and_jungle ... ok
 test test_blob_foliage_placer_spherical_clusters_and_corner_decay ... ok
 test test_spruce_foliage_placer_stepped_cone_shape ... ok
@@ -319,30 +319,16 @@ test test_ellipsoid_blob_placer_connected_cluster_and_replacement ... ok
 test test_iron_vertical_distribution_curves ... ok
 test test_redstone_vertical_distribution_density_increasing_toward_bedrock ... ok
 test test_gold_distribution_and_badlands_extra_abundance ... ok
-test test_surface_rule_ast_conditions ... ok
-test test_standard_surface_strata_grass_dirt_stone ... ok
-test test_underwater_and_beach_sand_strata ... ok
-test test_desert_deep_sand_strata ... ok
-test test_badlands_terracotta_banding_and_red_sand ... ok
-test test_mountain_peaks_exposed_stone_gravel_snow ... ok
-test test_aquifer_grid_cell_partitioning ... ok
-test test_aquifer_fluid_type_elevation_switching_lava_below_minus_54 ... ok
-test test_aquifer_flooding_logic_backfills_carved_space ... ok
-test test_barrier_noise_prevents_leaking_and_creates_dry_pockets ... ok
-test test_aquifer_unflooded_dry_pockets ... ok
-test test_aquifer_bedrock_immunity ... ok
-test test_cheese_caves_cavern_density ... ok
-test test_spaghetti_caves_3d_and_2d ... ok
-test test_noodle_caves_claustrophobic_tunnels ... ok
-test test_canyon_carver_generation_and_shape ... ok
-test test_bedrock_never_carved ... ok
-test test_carve_block_replacement_rules ... ok
+test test_copper_vertical_distribution_and_dripstone_doubling ... ok
+test test_lapis_lazuli_triangular_distribution_peak_at_zero ... ok
+test test_diamond_reduced_air_exposure_rule ... ok
 test test_surface_rules_badlands_banded_terracotta ... ok
+test test_badlands_column_exact_palette_sequence_y64_to_y120 ... ok
 test test_concentric_rings_stronghold_placement ... ok
 test test_chunk_parity_seed_123456789 ... ok
 test test_noise_router_15_functions_and_density_parity ... ok
 ...
-test result: ok. 49 passed; 0 failed; 0 ignored; finished in 0.46s
+test result: ok. 58 passed; 0 failed; 0 ignored; finished in 0.46s
 
 running 5 tests in mc_gameplay
 test test_crafting_table_preview_craft_and_auto_drop ... ok

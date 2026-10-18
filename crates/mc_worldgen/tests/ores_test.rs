@@ -259,3 +259,130 @@ fn test_diamond_triangular_distribution_peak_at_bedrock() {
         deep_diamonds, shallow_diamonds
     );
 }
+
+#[test]
+fn test_copper_vertical_distribution_and_dripstone_doubling() {
+    use mc_worldgen::ores::{copper_dripstone_distribution, copper_regular_distribution};
+
+    let regular = copper_regular_distribution();
+    let dripstone = copper_dripstone_distribution();
+
+    let mut rng = LegacyRandom::new(12345);
+
+    // Copper: Triangular -16 to 112 with peak at Y=48
+    for _ in 0..500 {
+        let y = regular.sample(&mut rng);
+        assert!(y >= -16 && y <= 112, "Copper must stay within [-16, 112], got {}", y);
+    }
+
+    let peak_density = regular.probability_density(48);
+    let low_density = regular.probability_density(-10);
+    let high_density = regular.probability_density(100);
+
+    assert!(peak_density > low_density * 2.5, "Copper density at peak Y=48 must exceed Y=-10");
+    assert!(peak_density > high_density * 2.5, "Copper density at peak Y=48 must exceed Y=100");
+
+    // Dripstone caves distribution has matching elevation range
+    assert_eq!(regular, dripstone);
+}
+
+#[test]
+fn test_lapis_lazuli_triangular_distribution_peak_at_zero() {
+    use mc_worldgen::ores::lapis_regular_distribution;
+
+    let lapis = lapis_regular_distribution();
+    let mut rng = LegacyRandom::new(54321);
+
+    // Lapis regular: Triangular -32 to 32 with peak at Y=0
+    for _ in 0..500 {
+        let y = lapis.sample(&mut rng);
+        assert!(y >= -32 && y <= 32, "Lapis must stay within [-32, 32], got {}", y);
+    }
+
+    let peak_density = lapis.probability_density(0);
+    let low_density = lapis.probability_density(-28);
+    let high_density = lapis.probability_density(28);
+
+    assert!(peak_density > low_density * 3.0, "Lapis density at peak Y=0 must exceed Y=-28");
+    assert!(peak_density > high_density * 3.0, "Lapis density at peak Y=0 must exceed Y=28");
+}
+
+#[test]
+fn test_gold_regular_triangular_distribution_peak_at_minus_16() {
+    use mc_worldgen::ores::gold_regular_triangular_distribution;
+
+    let gold = gold_regular_triangular_distribution();
+    let mut rng = LegacyRandom::new(998877);
+
+    // Gold triangular: -64 to 32 with peak at Y = (-64 + 32)/2 = -16
+    for _ in 0..500 {
+        let y = gold.sample(&mut rng);
+        assert!(y >= -64 && y <= 32, "Triangular gold must stay within [-64, 32], got {}", y);
+    }
+
+    let peak_density = gold.probability_density(-16);
+    let low_density = gold.probability_density(-60);
+    let high_density = gold.probability_density(25);
+
+    assert!(peak_density > low_density * 2.5, "Gold density at peak Y=-16 must exceed Y=-60");
+    assert!(peak_density > high_density * 2.5, "Gold density at peak Y=-16 must exceed Y=25");
+}
+
+#[test]
+fn test_diamond_reduced_air_exposure_rule() {
+    use mc_worldgen::features::ores::{ChunkOreBuffer, OreBlobPlacer, OreType};
+
+    // Buffer 1: Solid stone (no air exposure)
+    let mut solid_buf = ChunkOreBuffer::new(0, 0, 0, 16, 16, 16, SurfaceBlock::Stone);
+    let mut rng1 = LegacyRandom::new(42);
+    let placed_solid = OreBlobPlacer::place_blob_with_air_exposure(
+        &mut solid_buf,
+        (8, 8, 8),
+        8,
+        OreType::Diamond,
+        0.5,
+        &mut rng1,
+    );
+
+    // Buffer 2: Center hollowed out with Air (lots of air exposure)
+    let mut exposed_buf = ChunkOreBuffer::new(0, 0, 0, 16, 16, 16, SurfaceBlock::Stone);
+    for x in 6..=10 {
+        for y in 6..=10 {
+            for z in 6..=10 {
+                exposed_buf.set_block(x, y, z, SurfaceBlock::Air);
+            }
+        }
+    }
+    let mut rng2 = LegacyRandom::new(42);
+    let placed_exposed = OreBlobPlacer::place_blob_with_air_exposure(
+        &mut exposed_buf,
+        (8, 8, 8),
+        8,
+        OreType::Diamond,
+        0.5,
+        &mut rng2,
+    );
+
+    // Air exposure discard rule ensures significantly fewer diamonds placed when exposed to air caves
+    assert!(
+        placed_exposed < placed_solid,
+        "Air-exposed diamond vein ({}) must place fewer blocks than solid vein ({}) due to discard chance",
+        placed_exposed, placed_solid
+    );
+}
+
+#[test]
+fn test_features_ores_module_parity() {
+    use mc_worldgen::features::ores::{OreGenerator, OreType};
+
+    let generator = OreGenerator::vanilla_overworld();
+    assert_eq!(generator.configs.len(), 17, "Vanilla ore generator must configure 17 distinct ore feature passes");
+
+    let has_copper = generator.configs.iter().any(|c| c.ore_type == OreType::Copper);
+    let has_lapis = generator.configs.iter().any(|c| c.ore_type == OreType::Lapis);
+    let has_diamond = generator.configs.iter().any(|c| c.ore_type == OreType::Diamond && c.discard_chance_on_air_exposure > 0.0);
+
+    assert!(has_copper, "Must configure Copper ore");
+    assert!(has_lapis, "Must configure Lapis Lazuli ore");
+    assert!(has_diamond, "Must configure Diamond ore with air discard rule");
+}

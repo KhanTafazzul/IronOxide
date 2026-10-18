@@ -1,6 +1,7 @@
 pub mod aquifers;
 pub mod biomes;
 pub mod carvers;
+pub mod features;
 pub mod ores;
 pub mod seed_pipeline;
 pub mod structures;
@@ -8,11 +9,13 @@ pub mod surface;
 pub mod vegetation;
 
 pub use ores::{
-    coal_lower_distribution, coal_upper_distribution, diamond_distribution,
-    gold_badlands_extra_distribution, gold_regular_distribution, iron_middle_distribution,
-    iron_small_distribution, iron_upper_distribution, redstone_lower_distribution,
-    redstone_regular_distribution, ChunkOreBuffer, HeightDistribution, OreBlobPlacer,
-    OreBlockAccess, OreGenerator, OreType, OreVeinConfig,
+    coal_lower_distribution, coal_upper_distribution, copper_dripstone_distribution,
+    copper_regular_distribution, diamond_distribution, gold_badlands_extra_distribution,
+    gold_regular_distribution, gold_regular_triangular_distribution, iron_middle_distribution,
+    iron_small_distribution, iron_upper_distribution, lapis_buried_distribution,
+    lapis_regular_distribution, redstone_lower_distribution, redstone_regular_distribution,
+    ChunkOreBuffer, HeightDistribution, OreBlobPlacer, OreBlockAccess, OreGenerator, OreType,
+    OreVeinConfig,
 };
 pub use surface::{build_overworld_rules, Condition, SurfaceContext, SurfaceRule, SurfaceSystem};
 pub use vegetation::{

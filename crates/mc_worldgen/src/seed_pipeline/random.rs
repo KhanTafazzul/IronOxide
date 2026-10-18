@@ -223,6 +223,16 @@ impl Xoroshiro128PlusPlus {
     }
 
     #[inline]
+    pub fn next_float(&mut self) -> f32 {
+        ((self.next_long() as u64 >> 40) as f32) * 5.9604645e-8
+    }
+
+    #[inline]
+    pub fn next_boolean(&mut self) -> bool {
+        (self.next_long() & 1) != 0
+    }
+
+    #[inline]
     pub fn next_double(&mut self) -> double {
         ((self.next_long() as u64 >> 11) as f64) * 1.1102230246251565e-16
     }

@@ -4,6 +4,7 @@
 //! REA Reference: net.minecraft.world.level.levelgen.SurfaceRules$SurfaceRule (dph$u.class)
 
 use crate::biomes::{BiomeId, SurfaceBlock, TerracottaBands};
+use crate::seed_pipeline::random::PositionalRandomFactory;
 
 /// Context information provided during surface rule evaluation for a specific voxel.
 /// REA Reference: net.minecraft.world.level.levelgen.SurfaceRules$Context (dph$e.class)
@@ -26,6 +27,10 @@ pub struct SurfaceContext {
     pub surface_noise: f64,
     /// Whether the terrain slope is steep (e.g. mountain cliff walls).
     pub is_steep: bool,
+    /// Surface hole or underwater depression pocket.
+    pub is_hole: bool,
+    /// World random seed for deterministic noise / gradients.
+    pub seed: u64,
 }
 
 impl SurfaceContext {
@@ -41,6 +46,8 @@ impl SurfaceContext {
         let stone_depth_below = y - (-64);
         let water_height = 63;
         let is_steep = false;
+        let is_hole = false;
+        let seed = 192837465;
 
         Self {
             x,
@@ -53,7 +60,24 @@ impl SurfaceContext {
             biome,
             surface_noise,
             is_steep,
+            is_hole,
+            seed,
         }
+    }
+
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.seed = seed;
+        self
+    }
+
+    pub fn with_steep(mut self, is_steep: bool) -> Self {
+        self.is_steep = is_steep;
+        self
+    }
+
+    pub fn with_hole(mut self, is_hole: bool) -> Self {
+        self.is_hole = is_hole;
+        self
     }
 }
 
@@ -88,9 +112,26 @@ pub enum Condition {
         max_y: i32,
     },
 
+    /// Linear probability gradient between true_at_and_below and false_at_and_above.
+    /// Matches `SurfaceRules.verticalGradient("minecraft:bedrock_floor", bottom(), aboveBottom(5))`.
+    VerticalGradient {
+        random_name: String,
+        true_at_and_below: i32,
+        false_at_and_above: i32,
+    },
+
     /// Steep terrain cliff condition.
     /// Matches `SurfaceRules.steep()`.
     Steep,
+
+    /// Surface hole or underwater depression pocket. Generates gravel/sand patches on ocean and river beds.
+    /// Matches `SurfaceRules.hole()`.
+    Hole,
+
+    /// Temperature check (e.g. for mountain freezing).
+    TemperatureCheck {
+        max_temp: f64,
+    },
 
     /// Logical NOT inverting child condition.
     /// Matches `SurfaceRules.not()`.
@@ -132,7 +173,33 @@ impl Condition {
                 ctx.y >= *min_y && ctx.y <= *max_y
             }
 
+            Condition::VerticalGradient {
+                random_name,
+                true_at_and_below,
+                false_at_and_above,
+            } => {
+                if ctx.y <= *true_at_and_below {
+                    return true;
+                }
+                if ctx.y >= *false_at_and_above {
+                    return false;
+                }
+                let progress = (*false_at_and_above - ctx.y) as f64
+                    / (*false_at_and_above - *true_at_and_below) as f64;
+                let factory = PositionalRandomFactory::from_world_seed(ctx.seed as i64);
+                let named_factory = factory.from_hash_of(random_name).fork_positional();
+                let mut rng = named_factory.at(ctx.x, ctx.y, ctx.z);
+                (rng.next_float() as f64) < progress
+            }
+
             Condition::Steep => ctx.is_steep,
+
+            Condition::Hole => ctx.is_hole || ctx.surface_noise < -0.15,
+
+            Condition::TemperatureCheck { max_temp } => {
+                let temp = (ctx.biome.temperature() as f64) - (ctx.y as f64 - 64.0) * 0.00166667;
+                temp <= *max_temp
+            }
 
             Condition::Not(inner) => !inner.test(ctx),
 

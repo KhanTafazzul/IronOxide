@@ -218,3 +218,156 @@ fn test_surface_rules_bedrock_and_oceans() {
     let deepslate = engine.get_block(0, -20, 0, 70, BiomeId::Plains, 0.0);
     assert_eq!(deepslate, SurfaceBlock::Deepslate);
 }
+
+#[test]
+fn test_badlands_column_exact_palette_sequence_y64_to_y120() {
+    let engine = SurfaceRuleEngine::new(42);
+    let plateau_y = 140;
+
+    // Exact 57-block sequence evaluated from Minecraft 1.20.4 client.jar bytecode
+    // (dpi.class / SurfaceSystem terracotta band algorithm with Xoroshiro128++ seed 42)
+    let expected = [
+        SurfaceBlock::Terracotta,          // 64
+        SurfaceBlock::Terracotta,          // 65
+        SurfaceBlock::Terracotta,          // 66
+        SurfaceBlock::LightGrayTerracotta, // 67
+        SurfaceBlock::WhiteTerracotta,     // 68
+        SurfaceBlock::LightGrayTerracotta, // 69
+        SurfaceBlock::Terracotta,          // 70
+        SurfaceBlock::Terracotta,          // 71
+        SurfaceBlock::OrangeTerracotta,    // 72
+        SurfaceBlock::Terracotta,          // 73
+        SurfaceBlock::Terracotta,          // 74
+        SurfaceBlock::OrangeTerracotta,    // 75
+        SurfaceBlock::Terracotta,          // 76
+        SurfaceBlock::OrangeTerracotta,    // 77
+        SurfaceBlock::Terracotta,          // 78
+        SurfaceBlock::Terracotta,          // 79
+        SurfaceBlock::OrangeTerracotta,    // 80
+        SurfaceBlock::Terracotta,          // 81
+        SurfaceBlock::Terracotta,          // 82
+        SurfaceBlock::YellowTerracotta,    // 83
+        SurfaceBlock::LightGrayTerracotta, // 84
+        SurfaceBlock::WhiteTerracotta,     // 85
+        SurfaceBlock::OrangeTerracotta,    // 86
+        SurfaceBlock::YellowTerracotta,    // 87
+        SurfaceBlock::Terracotta,          // 88
+        SurfaceBlock::Terracotta,          // 89
+        SurfaceBlock::Terracotta,          // 90
+        SurfaceBlock::OrangeTerracotta,    // 91
+        SurfaceBlock::Terracotta,          // 92
+        SurfaceBlock::WhiteTerracotta,     // 93
+        SurfaceBlock::RedTerracotta,       // 94
+        SurfaceBlock::RedTerracotta,       // 95
+        SurfaceBlock::Terracotta,          // 96
+        SurfaceBlock::YellowTerracotta,    // 97
+        SurfaceBlock::Terracotta,          // 98
+        SurfaceBlock::Terracotta,          // 99
+        SurfaceBlock::WhiteTerracotta,     // 100
+        SurfaceBlock::Terracotta,          // 101
+        SurfaceBlock::Terracotta,          // 102
+        SurfaceBlock::Terracotta,          // 103
+        SurfaceBlock::Terracotta,          // 104
+        SurfaceBlock::Terracotta,          // 105
+        SurfaceBlock::OrangeTerracotta,    // 106
+        SurfaceBlock::Terracotta,          // 107
+        SurfaceBlock::Terracotta,          // 108
+        SurfaceBlock::Terracotta,          // 109
+        SurfaceBlock::OrangeTerracotta,    // 110
+        SurfaceBlock::Terracotta,          // 111
+        SurfaceBlock::LightGrayTerracotta, // 112
+        SurfaceBlock::WhiteTerracotta,     // 113
+        SurfaceBlock::Terracotta,          // 114
+        SurfaceBlock::Terracotta,          // 115
+        SurfaceBlock::OrangeTerracotta,    // 116
+        SurfaceBlock::Terracotta,          // 117
+        SurfaceBlock::Terracotta,          // 118
+        SurfaceBlock::Terracotta,          // 119
+        SurfaceBlock::OrangeTerracotta,    // 120
+    ];
+
+    for (idx, &expected_block) in expected.iter().enumerate() {
+        let y = 64 + idx as i32;
+        let block = engine.get_block(0, y, 0, plateau_y, BiomeId::Badlands, 0.0);
+        assert_eq!(
+            block, expected_block,
+            "Badlands terracotta mismatch at Y={}: expected {:?}, got {:?}",
+            y, expected_block, block
+        );
+    }
+}
+
+#[test]
+fn test_surface_rules_steep_and_hole_conditions() {
+    let engine = SurfaceRuleEngine::default();
+
+    // 1. Steep cliff face on Plains replaces GrassBlock with bare Stone
+    use mc_worldgen::biomes::SurfaceContext;
+    let normal_ctx = SurfaceContext::new(0, 70, 0, 70, BiomeId::Plains, 0.0);
+    assert_eq!(engine.get_block_with_context(&normal_ctx), SurfaceBlock::GrassBlock);
+
+    let steep_ctx = normal_ctx.with_steep(true);
+    assert_eq!(
+        engine.get_block_with_context(&steep_ctx),
+        SurfaceBlock::Stone,
+        "Steep cliff face must replace surface grass with bare stone"
+    );
+
+    // Steep + Hole places Gravel
+    let steep_hole_ctx = steep_ctx.with_hole(true);
+    assert_eq!(
+        engine.get_block_with_context(&steep_hole_ctx),
+        SurfaceBlock::Gravel,
+        "Steep cliff face with hole pocket must generate gravel"
+    );
+
+    // 2. Underwater depression / hole pocket generates Gravel
+    let ocean_hole_ctx = SurfaceContext::new(0, 50, 0, 50, BiomeId::Ocean, 0.0).with_hole(true);
+    assert_eq!(
+        engine.get_block_with_context(&ocean_hole_ctx),
+        SurfaceBlock::Gravel,
+        "Underwater depression pocket in ocean must place gravel"
+    );
+}
+
+#[test]
+fn test_surface_rules_vertical_gradient_bedrock() {
+    let engine = SurfaceRuleEngine::new(42);
+
+    // Bedrock floor at MIN_Y (-64) is always 100% solid Bedrock
+    for x in -5..=5 {
+        for z in -5..=5 {
+            let block = engine.get_block(x, -64, z, 70, BiomeId::Plains, 0.0);
+            assert_eq!(block, SurfaceBlock::Bedrock, "Y=-64 must be bedrock at ({}, {})", x, z);
+        }
+    }
+
+    // At Y >= -58, vertical gradient for bedrock floor is 0% (false), so no bedrock
+    for x in -5..=5 {
+        for z in -5..=5 {
+            let block = engine.get_block(x, -58, z, 70, BiomeId::Plains, 0.0);
+            assert_ne!(block, SurfaceBlock::Bedrock, "Y=-58 must not be bedrock");
+        }
+    }
+
+    // Between Y=-63 and Y=-59, transition band contains both Bedrock and Deepslate
+    let mut bedrock_count = 0;
+    let mut deepslate_count = 0;
+    for x in -10..=10 {
+        for z in -10..=10 {
+            for y in -63..=-60 {
+                let block = engine.get_block(x, y, z, 70, BiomeId::Plains, 0.0);
+                if block == SurfaceBlock::Bedrock {
+                    bedrock_count += 1;
+                } else if block == SurfaceBlock::Deepslate {
+                    deepslate_count += 1;
+                }
+            }
+        }
+    }
+    assert!(
+        bedrock_count > 0 && deepslate_count > 0,
+        "Bedrock transition band (-63..=-60) must have a probabilistic mix of Bedrock and Deepslate (bedrock={}, deepslate={})",
+        bedrock_count, deepslate_count
+    );
+}

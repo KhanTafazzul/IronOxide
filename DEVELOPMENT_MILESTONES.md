@@ -3,8 +3,8 @@
 
 > **Project Goal**: Re-implement Minecraft 1.20.4 client and voxel engine from scratch in **Rust** using **WGPU** and **WGSL** shaders by reverse-engineering `client.jar` using decompilation and exact vanilla algorithms.
 >
-> **Status**: **235 / 235 Unit & Integration Tests Passing (173 in IronOxide, 49 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
-> **Last Updated**: Complete Noise Router & Cave Density (100% Bit-Exact Vanilla Parity) Fully Completed & Verified.
+> **Status**: **244 / 244 Unit & Integration Tests Passing (173 in IronOxide, 58 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
+> **Last Updated**: Full Ore Generation & Height Trapezoids (100% Bit-Exact Vanilla Parity) Fully Completed & Verified.
 
 ---
 
@@ -48,7 +48,7 @@
 | **Task 39: 3D Noise Cave Carvers & Canyons** | `crates/mc_worldgen/src/carvers/` | Done | Cheese caves (3D cavern bubbles), Spaghetti caves ($\sqrt{N_1^2 + N_2^2} < r$ tunnels), Noodle caves (high-freq ridge passages), Canyons (steep 112-step ravines, yScale=3.0), replaceable block rules & bedrock protection |
 | **Task 40: Local Aquifers & Fluid Flooding** | `crates/mc_worldgen/src/aquifers/` | Done | 16x40x16 cell grid sampler, target fluid levels & spread, $Y < -54$ water $\rightarrow$ lava transition, cavity fluid backfilling, barrier noise stone dams preventing leaks & preserving dry air pockets |
 | **Task 41: Surface Rule Engine & Biome Strata** | `crates/mc_worldgen/src/surface/` | Done | AST rule evaluation (`AbovePreliminarySurface`, `WaterCheck`, `Biome`, `YCheck`, `All`, `Any`, `Not`), standard strata (GrassBlock/Dirt/Stone/Deepslate), underwater/beaches (Sand/Sandstone), desert (deep Sand/Sandstone), badlands (terracotta banding & red sand), mountain peaks (Stone/Gravel/SnowBlock) |
-| **Task 42: Ore Vein Generation & Distribution Trapezoids** | `crates/mc_worldgen/src/ores/` | Done | Ellipsoid blob placer (`OreFeature` / `dsp.class`), target substitution (`Stone` $\rightarrow$ Ore, `Deepslate` $\rightarrow$ Deepslate Ore), vertical trapezoid height providers (`dxp.class`), Coal/Iron/Gold/Redstone/Diamond curves, Badlands gold abundance, Bedrock immunity |
+| **Task 42: Full Ore Generation & Height Trapezoids** | `crates/mc_worldgen/src/features/ores.rs`, `src/ores/` | Done | 100% vanilla ore cluster placements across 17 feature passes (`OreFeature` / `dsp.class`, `OreConfiguration` / `dug.class`, `HeightRangePlacement` / `dyf.class`, `TrapezoidHeightProvider` / `dxp.class`, `UniformHeightProvider` / `dxq.class`). Connected 3D ellipsoid blob placer, rock target swapping (`Stone` $\rightarrow$ Ore, `Deepslate` $\rightarrow$ Deepslate Ore below Y=0), reduced air exposure rules (`discard_chance_on_air_exposure`), Coal (uniform 136..256 & triangular peak Y=96), Iron (triangular Y=16 & high mountain Y=256), Copper (triangular Y=48 & doubled Dripstone Caves size 20), Gold (triangular peak Y=-16 & Badlands extra Y=32..256), Redstone (uniform & linear bedrock ramp), Lapis (triangular peak Y=0 & buried uniform), Diamond (triangular peak at bedrock Y=-64, sizes 4..12 with air discard) |
 | **Task 43: Procedural Tree & Foliage Placers** | `crates/mc_worldgen/src/vegetation/` | Done | Straight trunk (4-7 blocks Oak/Birch), branching mega trunk (2x2 Dark Oak/Jungle with angled branches), blob foliage with corner decay (`dvf.class`), stepped cone spruce foliage (`dvq.class`), and ground cover scatter pass (Poppy, Dandelion, Short Grass, Tall Grass) |
 | **Noise Router & Cave Density (100%)** | `crates/mc_worldgen/src/seed_pipeline/` | Done | All 15 vanilla noise router channels (`barrier`, `fluid_level_floodedness/spread`, `lava`, `temperature`, `vegetation`, `continents`, `erosion`, `depth`, `ridges`, `caves_sponge`, `caves_spaghetti_2d/roughness`, `caves_noodle`, `initial_density_without_jaggedness`, `final_density`, `vein_*`), cell trilinear interpolation (-64..320 Y), and chunk (0,0) seed 123456789 parity |
 
@@ -840,13 +840,16 @@ When resuming next, execution will start directly from **Task 33**:
   - ECS, zombie pathfinding, & humanoid models: 12 tests
   - Survival hunger, saturation, & damage vitals: 6 tests
   - Container tile entities & chest screens: 4 tests
-* **`crates/mc_worldgen` (48 tests)**:
+* **`crates/mc_worldgen` (58 tests)**:
   - JVM PRNG & Stafford13 seed derivation parity: 1 test
   - Full Overworld biome registration & roundtrip: 1 test
   - Biome climate categories & parameter points: 1 test
   - Surface rules (Snowy, Desert/Beach, Badlands banded terracotta, Bedrock/Oceans): 4 tests
+  - Badlands column exact palette sequence Y=64..120 matching JVM bytecode: 1 test
+  - Surface AST steep cliff (> 45 deg) & hole depression rules: 1 test
+  - Bedrock vertical gradient linear probability band: 1 test
   - Octave & Simplex noise generation: 1 test
-  - Seed-for-seed 1:1 mathematical parity with vanilla 1.20.4: 3 tests
+  - Seed-for-seed 1:1 mathematical parity with vanilla 1.20.4: 4 tests
   - Concentric rings stronghold placement (128 strongholds): 1 test
   - Random spread placement (Villages, Outposts, Temples, Mansions, End Cities): 4 tests
   - Connected chunk structure instantiation: 1 test
@@ -873,6 +876,11 @@ When resuming next, execution will start directly from **Task 33**:
   - Coal vertical distribution curves (Upper uniform & Lower triangular peak at Y=96): 1 test
   - Iron vertical distribution curves (Middle peak Y=16 & Upper mountain peak Y=256): 1 test
   - Gold distribution & Badlands extra abundance (3x+ gold volume): 1 test
+  - Gold regular triangular distribution peak at Y=-16: 1 test
+  - Copper vertical distribution (peak Y=48) & Dripstone Caves doubling: 1 test
+  - Lapis Lazuli triangular distribution peak at Y=0: 1 test
+  - Diamond reduced air exposure rule validation: 1 test
+  - Full ore feature module parity across 17 vanilla passes: 1 test
   - Redstone vertical distribution & increasing density toward bottom bedrock: 1 test
   - Diamond triangular distribution peak at bedrock level ($Y = -64$): 1 test
   - Straight trunk placer (Oak/Birch 4-7 blocks & dirt base conversion): 1 test

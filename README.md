@@ -5,7 +5,7 @@ High-Performance Voxel Game Engine and Minecraft Client Architecture in Rust
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Language: Rust 2024](https://img.shields.io/badge/Language-Rust_2024-orange.svg)](https://www.rust-lang.org/)
 [![Graphics: WGPU](https://img.shields.io/badge/Graphics-WGPU_/_WGSL-green.svg)](https://wgpu.rs/)
-[![Tests: 184 Passing](https://img.shields.io/badge/Tests-184_Passed-brightgreen.svg)]()
+[![Tests: 204 Passing](https://img.shields.io/badge/Tests-204_Passed-brightgreen.svg)]()
 
 ---
 
@@ -35,14 +35,19 @@ The engine achieves deterministic behavioral fidelity with the vanilla Java edit
   * Extraction of 6 normalized frustum planes directly from the combined view-projection matrix.
   * Conservative axis-aligned bounding box (AABB) intersection tests for full 16x16x16 chunk sections.
 
-### 2. Volumetric Weather and Real-Time Dynamic Lighting
-* **Atmospheric Simulation**:
-  * Deterministic weather state machine governing Clear, Rain, and Thunder states with exponential transition curves.
-  * Elevation-dependent temperature lapse rate ($0.00166667^\circ\text{C}$ per block above sea level $Y = 64$) determining precipitation transitions between rain and snow.
+### 2. Volumetric Weather, Dynamic Cycles & Accumulation
+* **Dynamic Weather Cycle**:
+  * Global timer state machine: `clear_weather_time` (12,000 to 168,000 ticks) and `rain_time` / `thunder_time` (12,000 to 24,000 / 168,000 ticks).
+  * 50-tick smooth linear fade (`RAIN_FADE_PER_TICK = 0.02`) controlling visual rain/snow opacity, atmospheric sky light attenuation (up to 25%), and fog distance compression (up to 35%).
+* **Precipitation & Accumulation Ticking**:
+  * Elevation-dependent temperature lapse rate: $T_{\text{effective}} = T_{\text{base}} - (y - 64) \times 0.00166667$.
+  * If raining and $T_{\text{effective}} < 0.15$:
+    * Exposed still water sources freeze into `Ice` (if block light $< 11$).
+    * Solid top surfaces accumulate `SnowLayer` ($h = 1$ placed onto air, or incremented $1 \rightarrow 8$).
+  * When clear weather returns or when exposed to artificial block light $> 11$, snow layers thaw down and ice melts back to water.
 * **Precipitation Meshing**:
   * Dynamic $32 \times 32 \times 32$ bounding cylinder centered on the camera.
   * Double-sided quad generation with vertical velocity translation and wind shear drift.
-  * Real-time fog density escalation and skylight reduction during storms.
 * **Handheld Dynamic Lighting**:
   * Dedicated WGSL uniform array supporting point light sources held in the main hand or off-hand (Torch, Lantern, Glowstone, Sea Lantern, Campfire).
   * Smooth quadratic inverse-square attenuation combined additively with precomputed vertex illumination.
@@ -104,6 +109,15 @@ The engine achieves deterministic behavioral fidelity with the vanilla Java edit
   * Automated recipe parser extracting all 822 crafting recipes and 99 tag definitions directly from `client.jar`.
   * Support for shaped matrix recipes (with character key parsing and horizontal mirror support) and shapeless recipes (with bipartite backtracking matching).
   * High-performance in-memory $O(1)$ lookup cache allowing instantaneous recipe resolution from any 3x3 crafting grid.
+* **Interactive Workstations Engine (`mc_gameplay`)**:
+  * **Crafting Table**: Full 3x3 crafting matrix with output stack preview and automated item return/drop on UI close.
+  * **Furnace, Blast Furnace & Smoker**: 20 Hz ticking tile entities tracking `lit_time`, `lit_duration`, `cooking_progress`, and `cooking_total_time`, supporting all vanilla fuels (Coal, Charcoal, Wood, Lava Bucket, Blaze Rod).
+  * **Anvil**: Repair calculations with 12% durability bonus, enchantment merging, renaming cost, exponential prior work penalty ($2^n - 1$), and survival 40-level cap.
+  * **Smithing Table & Stonecutter**: Netherite equipment upgrades, armor trim attachments, and stone variant cutting.
+* **Full Biome Registry & Surface Rules Engine (`mc_worldgen::biomes`)**:
+  * Complete registry of all 47+ Overworld biomes across Snowy, Cold, Temperate, Wet, Arid, Ocean, and Cave categories with bidirectional name mapping and temperature/downfall parameters.
+  * Deterministic 192-layer Badlands banded terracotta stratification matching vanilla `SurfaceSystem` (`dpi.class`) byte-for-byte with dynamic noise offsets.
+  * Desert sand/sandstone subsurface rules, snowy mountain packed ice peaks, and deepslate/bedrock transitions.
 
 
 
@@ -135,10 +149,15 @@ The engine achieves deterministic behavioral fidelity with the vanilla Java edit
 
 ```
 IronOxide/
-├── Cargo.toml                     # Package manifest, dependencies, and license metadata
+├── Cargo.toml                     # Package manifest, workspace members, and dependencies
 ├── LICENSE                        # GNU General Public License v3.0 (GPLv3)
 ├── README.md                      # Executive overview and technical documentation
 ├── DEVELOPMENT_MILESTONES.md      # Detailed task-by-task engineering log and specifications
+├── crates/                        # Modular engine workspace crates
+│   ├── mc_items/                  # Complete ItemId registry (1,329+ items) and tool/armor tier attributes
+│   ├── mc_crafting/               # Serde shaped/shapeless recipe parser (822 recipes from client.jar) & O(1) cache
+│   ├── mc_gameplay/               # Interactive workstations (Crafting Table, Furnaces, Anvil, Smithing, Stonecutter)
+│   └── mc_worldgen/               # 1:1 Seed-for-seed terrain, climate noise, 47+ biomes, surface rules & structures
 └── src/
     ├── main.rs                    # Application entry point, event loop, and systems orchestration
     ├── audio/                     # Audio synthesis and event triggers
@@ -182,7 +201,8 @@ IronOxide/
         ├── weather.rs             # Environmental weather state machine and temperature lapse rates
         └── generator/             # Procedural world generators
             ├── nether.rs          # 3D closed-box density noise and 5 Nether Biomes
-            └── the_end.rs         # Radial island noise, void gap, and Chorus plant growth
+            ├── the_end.rs         # Radial island noise, void gap, and Chorus plant growth
+            └── overworld.rs       # 1:1 Seed-for-seed Overworld parity hookup to mc_worldgen
 ```
 
 ---
@@ -213,11 +233,11 @@ IronOxide/
 
 ### Compilation Commands
 ```bash
-# Verify compilation across all modules
-cargo check
+# Verify compilation across all workspace crates
+cargo check --workspace
 
-# Execute the test suite (167 automated unit and integration tests)
-cargo test
+# Execute the test suite (204 automated unit and integration tests)
+cargo test --workspace
 
 # Build and run the client in optimized release mode
 cargo run --release
@@ -245,29 +265,40 @@ cargo run --release
 
 ## Automated Verification Suite
 
-The repository contains 167 automated unit and integration tests verifying engine correctness, numerical stability, and format compliance:
+The repository contains 204 automated unit and integration tests across the workspace verifying engine correctness, numerical stability, and format compliance:
 
 ```text
-running 167 tests
-test game::physics::tests::test_aabb_intersection ... ok
-test game::physics::tests::test_decoupled_axis_resolution ... ok
-test game::physics::tests::test_step_up_traversal ... ok
-test game::raycast::tests::test_raycast_subvoxel_precision ... ok
-test render::mesher::tests::test_greedy_face_merging ... ok
-test render::mesher::tests::test_ambient_occlusion_derivation ... ok
-test render::colormap::tests::test_barycentric_uv_sampling ... ok
-test storage::region::tests::test_region_file_header_offsets ... ok
-test storage::nbt::tests::test_nbt_compound_roundtrip ... ok
-test world::lighting::tests::test_dual_nibble_bfs_flood_fill ... ok
-test world::fluids::tests::test_lava_water_conversion_obsidian_cobble ... ok
-test world::generator::nether::tests::test_5_nether_biomes_climate ... ok
-test world::generator::the_end::tests::test_outer_islands_generation ... ok
-test world::structures::jigsaw::tests::test_structure_template_nbt_roundtrip ... ok
-test world::structures::jigsaw::tests::test_plains_village_generation ... ok
-test world::structures::end_city::tests::test_end_city_piece_tree ... ok
-test world::structures::end_city::tests::test_end_ship_25_percent_spawn_probability ... ok
+running 173 tests in IronOxide
+test world::weather::tests::test_global_weather_cycle_timers_and_transitions ... ok
+test world::weather::tests::test_chunk_precipitation_water_freezing_and_snow_accumulation ... ok
+test world::weather::tests::test_snow_and_ice_thawing_under_light ... ok
 ...
-test result: ok. 167 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.89s
+test result: ok. 173 passed; 0 failed; 0 ignored; finished in 7.46s
+
+running 18 tests in mc_worldgen
+test test_surface_rules_badlands_banded_terracotta ... ok
+test test_concentric_rings_stronghold_placement ... ok
+test test_chunk_parity_seed_123456789 ... ok
+...
+test result: ok. 18 passed; 0 failed; 0 ignored; finished in 0.08s
+
+running 5 tests in mc_gameplay
+test test_crafting_table_preview_craft_and_auto_drop ... ok
+test test_furnace_20hz_ticking_and_fuels ... ok
+test test_anvil_prior_work_penalty_and_repairs ... ok
+...
+test result: ok. 5 passed; 0 failed; 0 ignored; finished in 0.00s
+
+running 5 tests in mc_items
+test test_tool_tier_attributes_parity ... ok
+test test_item_id_name_roundtrip ... ok
+...
+test result: ok. 5 passed; 0 failed; 0 ignored; finished in 0.00s
+
+running 3 tests in mc_crafting
+test test_load_all_recipes_from_client_jar_and_lookup ... ok
+...
+test result: ok. 3 passed; 0 failed; 0 ignored; finished in 1.98s
 ```
 
 For the comprehensive breakdown of completed milestones and upcoming development targets, consult [DEVELOPMENT_MILESTONES.md](file:///c:/Users/khant/OneDrive/Desktop/Falix/Minecraft%20reverce%20in%20rust/IronOxide/DEVELOPMENT_MILESTONES.md).

@@ -680,6 +680,57 @@ When resuming next, execution will start directly from **Task 33**:
 
 ---
 
+## 🧪 Test Suite & Verification Status
+
+**Total: 204 / 204 Unit & Integration Tests Passing (0 Failed, 0 Ignored)**
+
+* **`IronOxide` Core (173 tests)**:
+  - Physics & AABB decoupled movement: 6 tests
+  - Amanatides-Woo DDA raycasting: 4 tests
+  - Greedy chunk mesher & ambient occlusion: 3 tests
+  - NibbleArray & BFS dual lighting engine: 7 tests
+  - Cellular automaton fluid engine: 7 tests
+  - Anvil `.mca` storage & NBT binary serialization: 11 tests
+  - Audio, HUD, Inventory GUI, & Item Entities: 22 tests
+  - Net portals (Nether/End) & dimensional transit: 13 tests
+  - Block registry & voxel bounding models: 11 tests
+  - Nether generator & 5 biomes: 5 tests
+  - The End generator & Chorus plant cellular loop: 7 tests
+  - Jigsaw structure engine & End City piece graph: 11 tests
+  - Weather simulation, cycle timers, & precipitation accumulation: 6 tests
+  - Weather rendering, particle box, & snow drift: 1 test
+  - ECS, zombie pathfinding, & humanoid models: 12 tests
+  - Survival hunger, saturation, & damage vitals: 6 tests
+  - Container tile entities & chest screens: 4 tests
+* **`crates/mc_worldgen` (18 tests)**:
+  - JVM PRNG & Stafford13 seed derivation parity: 1 test
+  - Full Overworld biome registration & roundtrip: 1 test
+  - Biome climate categories & parameter points: 1 test
+  - Surface rules (Snowy, Desert/Beach, Badlands banded terracotta, Bedrock/Oceans): 4 tests
+  - Octave & Simplex noise generation: 1 test
+  - Seed-for-seed 1:1 mathematical parity with vanilla 1.20.4: 3 tests
+  - Concentric rings stronghold placement (128 strongholds): 1 test
+  - Random spread placement (Villages, Outposts, Temples, Mansions, End Cities): 4 tests
+  - Connected chunk structure instantiation: 1 test
+  - Direct structure locator: 1 test
+* **`crates/mc_items` (5 tests)**:
+  - Complete 1,329+ `ItemId` name roundtrip: 1 test
+  - Tool tier attributes (durability, attack damage, speed): 2 tests
+  - Armor tier defense points & toughness: 1 test
+  - Item max stack sizes (1, 16, 64): 1 test
+* **`crates/mc_crafting` (3 tests)**:
+  - Serde shaped recipe matrix matching: 1 test
+  - Serde shapeless recipe permutation matching: 1 test
+  - Extraction & $O(1)$ lookup for all 822 recipes in `client.jar`: 1 test
+* **`crates/mc_gameplay` (5 tests)**:
+  - 3x3 Crafting Table output preview, crafting, & auto-drop: 1 test
+  - 20 Hz ticking Furnaces, Smokers, & Blast Furnaces with all standard fuels: 1 test
+  - Anvil repairs, durability merge bonus, & $2^n-1$ prior work penalty: 1 test
+  - Smithing Table Netherite gear upgrades & armor trims: 1 test
+  - Stonecutter single-ingredient cutting selection: 1 test
+
+---
+
 ## 🧭 Instructions for Maintaining This Document
 Whenever new tasks or systems are implemented:
 1. Update the **Summary of Completed Milestones** table with the new task number, module path, status, and summary.

@@ -19,4 +19,4 @@ pub use structures::{
     WoodlandMansionGenerator,
 };
 pub use tile_entity::{ChestTileEntity, TileEntity};
-pub use weather::{PrecipitationType, WeatherManager, WeatherState};
+pub use weather::{PrecipitationBlock, PrecipitationTickResult, PrecipitationType, WeatherManager, WeatherState};

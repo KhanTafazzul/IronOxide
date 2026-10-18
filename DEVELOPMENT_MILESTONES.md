@@ -3,8 +3,8 @@
 
 > **Project Goal**: Re-implement Minecraft 1.20.4 client and voxel engine from scratch in **Rust** using **WGPU** and **WGSL** shaders by reverse-engineering `client.jar` using decompilation and exact vanilla algorithms.
 >
-> **Status**: **201 / 201 Unit & Integration Tests Passing (170 in IronOxide, 18 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
-> **Last Updated**: Tasks 1 through 37 Fully Completed & Verified.
+> **Status**: **204 / 204 Unit & Integration Tests Passing (173 in IronOxide, 18 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
+> **Last Updated**: Tasks 1 through 38 Fully Completed & Verified.
 
 ---
 
@@ -44,6 +44,7 @@
 | **Task 35: Item Registry & Automated Recipe Parser** | `crates/mc_items/`, `crates/mc_crafting/` | Done | 1,329+ ItemId enum variants up to 1.21, exact tool/armor tiers, Serde shaped/shapeless deserializer, 822 vanilla recipes from client.jar, O(1) in-memory lookup cache |
 | **Task 36: Interactive Workstations Engine** | `crates/mc_gameplay/src/workstations/` | Done | Crafting table 3x3 with auto-drop, Furnace/Blast/Smoker 20Hz ticking with all vanilla fuels, Anvil repairs & prior work penalty $2^n-1$, Smithing Netherite upgrades & trims, Stonecutter |
 | **Task 37: Full Biome Registry & Surface Rules** | `crates/mc_worldgen/src/biomes/` | Done | Complete Overworld biomes registry (Snowy, Temperate, Arid, Oceans, Caves), SurfaceRuleEngine with Badlands 192-layer banded terracotta, desert sand/sandstone, and snowy stratification |
+| **Task 38: Dynamic Weather & Accumulation Tick** | `src/world/weather.rs` | Done | Global cycle timers (12k..168k clear, 12k..24k rain), 50-tick smooth fades, altitude lapse rate, freezing water $\rightarrow$ ice, snow layer accumulation (1..8) & light level $> 11$ thawing |
 
 
 
@@ -656,7 +657,28 @@ When resuming next, execution will start directly from **Task 33**:
 
 ---
 
+### Task 38: Dynamic Weather & Accumulation Tick
+- **Modules**: `src/world/weather.rs`, `src/world/mod.rs`
+- **Reverse-Engineered References**:
+  - `net.minecraft.server.level.ServerLevel.tickPrecipitation(...)` (`and.a(hx)`)
+  - `net.minecraft.world.level.biome.Biome.shouldFreeze(...)` (`cuo.a(cts, hx, boolean)`)
+  - `net.minecraft.world.level.biome.Biome.shouldSnow(...)` (`cuo.b(cts, hx)`)
+- **Key Implementations**:
+  - **Global Weather Cycle**:
+    - `clear_weather_time`: Random timer (12,000 to 168,000 ticks).
+    - `rain_time` / `thunder_time`: When triggered, transitions over 50 ticks to rain/storm (`RAIN_FADE_PER_TICK = 0.02`).
+    - Immediate countdown expiration and smooth visual/sky light/fog fade.
+  - **Random Chunk Precipitation Ticking**:
+    - In active chunks, samples top surface blocks and calculates effective altitude-adjusted temperature:
+      $$T_{\text{effective}} = T_{\text{base}} - (y - 64) \times 0.00166667$$
+    - If raining and $T_{\text{effective}} < 0.15$:
+      - Freezes exposed water sources into `Ice` when block light $< 11$.
+      - Places new `SnowLayer` ($h=1$) on solid surfaces, or accumulates layer height ($1 \rightarrow 8$).
+    - Thawing when clear weather returns or when block light level $> 11$:
+      - Melts `SnowLayer` down step-by-step or removes it.
+      - Thaws surface `Ice` back to `WaterSource`.
 
+---
 
 ## 🧭 Instructions for Maintaining This Document
 Whenever new tasks or systems are implemented:

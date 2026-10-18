@@ -3,8 +3,8 @@
 
 > **Project Goal**: Re-implement Minecraft 1.20.4 client and voxel engine from scratch in **Rust** using **WGPU** and **WGSL** shaders by reverse-engineering `client.jar` using decompilation and exact vanilla algorithms.
 >
-> **Status**: **184 / 184 Unit & Integration Tests Passing (169 in IronOxide, 5 in mc_items, 3 in mc_crafting, 7 in mc_worldgen)**
-> **Last Updated**: Tasks 1 through 35 Fully Completed & Verified.
+> **Status**: **195 / 195 Unit & Integration Tests Passing (170 in IronOxide, 12 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
+> **Last Updated**: Tasks 1 through 36 Fully Completed & Verified.
 
 ---
 
@@ -42,6 +42,7 @@
 | **Task 33: Seed-for-Seed Terrain & Biome Parity** | `crates/mc_worldgen/`, `src/world/generator/overworld.rs` | Done | 100% bit-for-bit mathematical parity with vanilla 1.20.4 RandomState, Stafford13, Xoroshiro128++, 6D climate fitness, and chunk heightmaps |
 | **Task 34: Structure Grid Placement & Concentric Rings** | `crates/mc_worldgen/src/structures/`, `src/world/generator/overworld.rs` | Done | Concentric rings placement (128 strongholds, ring 0 in 1,280-2,816 blocks), random spread placement for 6 structure sets, chunk generation hookup |
 | **Task 35: Item Registry & Automated Recipe Parser** | `crates/mc_items/`, `crates/mc_crafting/` | Done | 1,329+ ItemId enum variants up to 1.21, exact tool/armor tiers, Serde shaped/shapeless deserializer, 822 vanilla recipes from client.jar, O(1) in-memory lookup cache |
+| **Task 36: Interactive Workstations Engine** | `crates/mc_gameplay/src/workstations/` | Done | Crafting table 3x3 with auto-drop, Furnace/Blast/Smoker 20Hz ticking with all vanilla fuels, Anvil repairs & prior work penalty $2^n-1$, Smithing Netherite upgrades & trims, Stonecutter |
 
 
 
@@ -593,6 +594,38 @@ When resuming next, execution will start directly from **Task 33**:
     - `RecipeLookupCache` backed by a fast hash map cache mapping 3x3 `[Option<ItemId>; 9]` matrix keys to `ItemStack` outputs.
     - Pre-populates all common recipes and translations during startup.
     - Benchmarked at over 100,000 lookups in under 10 milliseconds (< 100 nanoseconds per query).
+
+---
+
+### Task 36: Interactive Workstations Engine
+- **Modules**: `crates/mc_gameplay/src/workstations/`, `IronOxide/src/game/mod.rs`
+- **Reverse-Engineered References**:
+  - `net.minecraft.world.inventory.CraftingMenu` (`cis.class`)
+  - `net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity` (`dgk.class`) & `FurnaceBlockEntity` (`dhr.class`) / `BlastFurnaceBlockEntity` (`dgu.class`)
+  - `net.minecraft.world.inventory.AnvilMenu` (`cid.class`)
+  - `net.minecraft.world.inventory.StonecutterMenu` (`cka.class`)
+  - `net.minecraft.world.inventory.SmithingMenu` (`cjx.class`)
+- **Key Implementations**:
+  - **Crafting Table**:
+    - Full 3x3 crafting grid with $O(1)$ output preview updates from `RecipeLookupCache`.
+    - Item consumption decrements exactly 1 item per populated matrix slot on crafting.
+    - `close_and_drop_items()` gathers all uncrafted matrix items for ground/inventory return on UI dismissal (`cis.b`).
+  - **Furnace / Blast Furnace / Smoker**:
+    - 20 Hz ticking tile entities with state flags: `lit_time`, `lit_duration`, `cooking_progress`, `cooking_total_time`, and `stored_experience`.
+    - Fuel burn ticks matching vanilla bytecode: Lava Bucket (20,000), Coal Block (16,000), Blaze Rod (2,400), Coal & Charcoal (1,600), Logs & Planks & Doors & Boats (300), Slabs (150), Sticks & Saplings (100). Special case: Lava Bucket consumption yields an empty `Bucket`.
+    - Blast Furnace (metals/ores only, 100 ticks / 2x speed) and Smoker (foods only, 100 ticks / 2x speed).
+  - **Anvil**:
+    - Unit material repair (max durability / 4 restored per ingot/diamond/leather).
+    - Item combining with vanilla 12% durability bonus: $\text{repaired} = \text{damage}_1 - (\text{durability}_2 + 0.12 \times \text{max\_durability})$.
+    - Enchantment merging with upgrade and conflict rules.
+    - Renaming (1 level base cost).
+    - Prior work penalty math: $p_{n+1} = p_n \times 2 + 1$ (equivalent to $2^n - 1$).
+    - Survival "Too Expensive!" hard cap at $\ge 40$ levels (bypassable in Creative mode) and 12% anvil degradation per use (`Intact` $\rightarrow$ `Chipped` $\rightarrow$ `Damaged` $\rightarrow$ `Broken`).
+  - **Smithing Table**:
+    - Netherite upgrade template recipes converting Diamond gear + Netherite Ingot $\rightarrow$ Netherite gear.
+    - Armor trim recipes consuming trim templates + armor piece + trim material.
+  - **Stonecutter**:
+    - Single-ingredient cutting recipes for stone, cobblestone, stone bricks, deepslate, and copper variants into slabs, stairs, walls, and grates.
 
 ---
 

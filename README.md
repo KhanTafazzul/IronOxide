@@ -5,7 +5,7 @@ High-Performance Voxel Game Engine and Minecraft Client Architecture in Rust
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Language: Rust 2024](https://img.shields.io/badge/Language-Rust_2024-orange.svg)](https://www.rust-lang.org/)
 [![Graphics: WGPU](https://img.shields.io/badge/Graphics-WGPU_/_WGSL-green.svg)](https://wgpu.rs/)
-[![Tests: 210 Passing](https://img.shields.io/badge/Tests-210_Passed-brightgreen.svg)]()
+[![Tests: 216 Passing](https://img.shields.io/badge/Tests-216_Passed-brightgreen.svg)]()
 
 ---
 
@@ -124,6 +124,13 @@ The engine achieves deterministic behavioral fidelity with the vanilla Java edit
   * **Noodle Caves**: Narrow, claustrophobic high-frequency ridge passages evaluated at frequency multiplier $8/3 \approx 2.6667$.
   * **Canyons / Ravines**: Procedural 112-step gorge trajectories with vertical scaling ($yScale = 3.0$), steep sidewall cross-sections, and step-wise yaw/pitch path progression.
   * **Carving Rules & Bedrock Protection**: Substitutes solid terrain (`Stone`, `Deepslate`, `Dirt`, `Terracotta`, `Sand`, `Gravel`, `Sandstone`) with `Air` or `Water` (below `SEA_LEVEL = 63`), strictly guaranteeing **Bedrock immunity** ($Y \le -60$).
+* **Local Aquifers & Fluid Flooding (`mc_worldgen::aquifers`)**:
+  * **16x40x16 Grid Cell Sampler**: Discretizes subterranean coordinate space into discrete 3D interpolation cells with deterministic Voronoi cell anchor jittering.
+  * **Target Fluid Levels & Floodedness**: Modulated by aquifer spread noise ($\pm 10$ blocks) and floodedness noise, naturally generating unflooded dry cave chambers (`fluid_level = MIN`) alongside subterranean lakes.
+  * **Elevation Fluid Switching**: Below $Y < -54$, fluid strictly transitions from `Water` to `Lava`, generating deep molten cavern floors; secondary deep lava noise triggers lava pools below $Y \le -10$.
+  * **Barrier Noise Stone Dams**: Asymmetric vertical pressure calculation and `aquifer_barrier` noise prevent fluids from leaking into adjacent dry air pockets, generating impermeable natural dividing stone and deepslate rock barriers.
+  * **Bedrock Immunity**: Enforces absolute bedrock immunity at $Y \le -60$, ensuring bedrock boundaries are never replaced with fluid.
+
 ### 5. Portals and Dimensional Transit
 * **Nether Portal Mechanics**:
   * Arbitrary rectangular obsidian frame validation (from $4 \times 5$ up to $23 \times 23$).
@@ -278,7 +285,7 @@ test world::weather::tests::test_snow_and_ice_thawing_under_light ... ok
 ...
 test result: ok. 173 passed; 0 failed; 0 ignored; finished in 7.46s
 
-running 24 tests in mc_worldgen
+running 30 tests in mc_worldgen
 test test_surface_rules_badlands_banded_terracotta ... ok
 test test_concentric_rings_stronghold_placement ... ok
 test test_chunk_parity_seed_123456789 ... ok
@@ -288,8 +295,14 @@ test test_noodle_caves_claustrophobic_tunnels ... ok
 test test_canyon_carver_generation_and_shape ... ok
 test test_bedrock_never_carved ... ok
 test test_carve_block_replacement_rules ... ok
+test test_aquifer_grid_cell_partitioning ... ok
+test test_aquifer_fluid_type_elevation_switching_lava_below_minus_54 ... ok
+test test_aquifer_flooding_logic_backfills_carved_space ... ok
+test test_barrier_noise_prevents_leaking_and_creates_dry_pockets ... ok
+test test_aquifer_unflooded_dry_pockets ... ok
+test test_aquifer_bedrock_immunity ... ok
 ...
-test result: ok. 24 passed; 0 failed; 0 ignored; finished in 0.35s
+test result: ok. 30 passed; 0 failed; 0 ignored; finished in 0.38s
 
 running 5 tests in mc_gameplay
 test test_crafting_table_preview_craft_and_auto_drop ... ok

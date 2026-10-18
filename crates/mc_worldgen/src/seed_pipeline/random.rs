@@ -146,8 +146,25 @@ impl PositionalRandomFactory {
     }
 
     #[inline]
+    pub fn from_seed(world_seed: i64) -> Self {
+        Self::from_world_seed(world_seed)
+    }
+
+    #[inline]
     pub fn from_hash_of(&self, key: &str) -> Xoroshiro128PlusPlus {
         let (s0, s1) = seed_from_hash_of(self.seed_lo, self.seed_hi, key);
+        Xoroshiro128PlusPlus::new(s0, s1)
+    }
+
+    /// Derives a positional PRNG at (x, y, z).
+    /// REA Reference: XoroshiroPositionalRandomFactory.at(x, y, z)
+    #[inline]
+    pub fn at(&self, x: i32, y: i32, z: i32) -> Xoroshiro128PlusPlus {
+        let pos_seed = ((x as i64).wrapping_mul(3129871))
+            ^ ((z as i64).wrapping_mul(116129781))
+            ^ (y as i64);
+        let s0 = pos_seed ^ self.seed_lo;
+        let s1 = mix_stafford13(pos_seed) ^ self.seed_hi;
         Xoroshiro128PlusPlus::new(s0, s1)
     }
 }

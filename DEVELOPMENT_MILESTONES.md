@@ -3,8 +3,8 @@
 
 > **Project Goal**: Re-implement Minecraft 1.20.4 client and voxel engine from scratch in **Rust** using **WGPU** and **WGSL** shaders by reverse-engineering `client.jar` using decompilation and exact vanilla algorithms.
 >
-> **Status**: **210 / 210 Unit & Integration Tests Passing (173 in IronOxide, 24 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
-> **Last Updated**: Tasks 1 through 39 Fully Completed & Verified.
+> **Status**: **216 / 216 Unit & Integration Tests Passing (173 in IronOxide, 30 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
+> **Last Updated**: Tasks 1 through 40 Fully Completed & Verified.
 
 ---
 
@@ -46,6 +46,7 @@
 | **Task 37: Full Biome Registry & Surface Rules** | `crates/mc_worldgen/src/biomes/` | Done | Complete Overworld biomes registry (Snowy, Temperate, Arid, Oceans, Caves), SurfaceRuleEngine with Badlands 192-layer banded terracotta, desert sand/sandstone, and snowy stratification |
 | **Task 38: Dynamic Weather & Accumulation Tick** | `src/world/weather.rs` | Done | Global cycle timers (12k..168k clear, 12k..24k rain), 50-tick smooth fades, altitude lapse rate, freezing water $\rightarrow$ ice, snow layer accumulation (1..8) & light level $> 11$ thawing |
 | **Task 39: 3D Noise Cave Carvers & Canyons** | `crates/mc_worldgen/src/carvers/` | Done | Cheese caves (3D cavern bubbles), Spaghetti caves ($\sqrt{N_1^2 + N_2^2} < r$ tunnels), Noodle caves (high-freq ridge passages), Canyons (steep 112-step ravines, yScale=3.0), replaceable block rules & bedrock protection |
+| **Task 40: Local Aquifers & Fluid Flooding** | `crates/mc_worldgen/src/aquifers/` | Done | 16x40x16 cell grid sampler, target fluid levels & spread, $Y < -54$ water $\rightarrow$ lava transition, cavity fluid backfilling, barrier noise stone dams preventing leaks & preserving dry air pockets |
 
 
 
@@ -710,9 +711,42 @@ When resuming next, execution will start directly from **Task 33**:
 
 ---
 
+### Task 40: Local Aquifers & Fluid Flooding
+- **Modules**: `crates/mc_worldgen/src/aquifers/` (`fluid.rs`, `grid.rs`, `barrier.rs`, `noise_aquifer.rs`, `mod.rs`), `crates/mc_worldgen/src/lib.rs`
+- **Reverse-Engineered References**:
+  - `net.minecraft.world.level.levelgen.Aquifer` (`doc.class`)
+  - `net.minecraft.world.level.levelgen.Aquifer$FluidStatus` (`doc$b.class`)
+  - `net.minecraft.world.level.levelgen.Aquifer$NoiseBasedAquifer` (`doc$c.class`)
+  - `net.minecraft.world.level.levelgen.NoiseRouter` (`dow.class`)
+  - Vanilla noise configurations: `aquifer_barrier` (-3), `aquifer_fluid_level_floodedness` (-7), `aquifer_fluid_level_spread` (-5), `aquifer_lava` (-1)
+- **Key Implementations**:
+  - **16x40x16 Grid Cell Partitioning**:
+    - World space subdivided into discrete interpolation cells ($16 \times 40 \times 16$).
+    - Deterministic positional jittering inside cells via `PositionalRandomFactory.at(cell_x, cell_y, cell_z)`.
+    - Cell anchor points bounded within cell limits.
+  - **Target Fluid Levels & Floodedness**:
+    - Base cell elevation: $\text{base\_level} = \text{cell\_y} \times 40 + 20$.
+    - `fluid_level_spread_noise` modulates fluid level by $\pm 10$ blocks.
+    - `fluid_level_floodedness_noise`: values below $-0.3$ generate completely dry, unflooded cave pockets (`fluid_level = i32::MIN`, `Air`).
+  - **$Y < -54$ Lava Elevation Rule**:
+    - Below elevation $Y = -54$ (or cell floor $< -54$), fluid strictly transitions from `Water` to `Lava`.
+    - Secondary deep lava noise check: below $Y \le -10$, $|\text{lava\_noise}| > 0.3$ produces deep lava lakes.
+  - **Barrier Noise & Pressure (Leak Prevention & Dry Pockets)**:
+    - Voronoi boundary similarity metric $\text{similarity}(d_1, d_2) = 1.0 - |d_2 - d_1| / 25.0$.
+    - Asymmetric vertical pressure calculation:
+      - Water vs Lava interface yields unconditional stone wall barrier ($\text{pressure} = 2.0$).
+      - Disparate fluid levels produce natural rock dams where $\text{adjusted\_density} = \text{similarity} \times \text{pressure} > 0.0$.
+      - Sealed barrier rock prevents flooded caverns from spilling into adjacent dry cave passages.
+  - **Cavity Backfilling & Bedrock Protection**:
+    - Carved air cavities below local aquifer target levels are backfilled with `Water` or `Lava`.
+    - Cavities above target level remain dry `Air`.
+    - Absolute bedrock immunity at $Y \le -60$.
+
+---
+
 ## 🧪 Test Suite & Verification Status
 
-**Total: 210 / 210 Unit & Integration Tests Passing (0 Failed, 0 Ignored)**
+**Total: 216 / 216 Unit & Integration Tests Passing (0 Failed, 0 Ignored)**
 
 * **`IronOxide` Core (173 tests)**:
   - Physics & AABB decoupled movement: 6 tests
@@ -732,7 +766,7 @@ When resuming next, execution will start directly from **Task 33**:
   - ECS, zombie pathfinding, & humanoid models: 12 tests
   - Survival hunger, saturation, & damage vitals: 6 tests
   - Container tile entities & chest screens: 4 tests
-* **`crates/mc_worldgen` (24 tests)**:
+* **`crates/mc_worldgen` (30 tests)**:
   - JVM PRNG & Stafford13 seed derivation parity: 1 test
   - Full Overworld biome registration & roundtrip: 1 test
   - Biome climate categories & parameter points: 1 test
@@ -749,6 +783,12 @@ When resuming next, execution will start directly from **Task 33**:
   - Bedrock immunity & non-carvable barrier protection ($Y \le -60$): 1 test
   - Replaceable block substitution (Stone/Deepslate/Dirt $\rightarrow$ Air or Water $< 63$): 1 test
   - Canyon / ravine 112-step trajectory, $yScale = 3.0$ & ellipsoid dimensions: 1 test
+  - 16x40x16 aquifer grid cell partitioning & anchor generation: 1 test
+  - Elevation fluid switching ($Y < -54$ Water $\rightarrow$ Lava): 1 test
+  - Cavity fluid backfilling below local aquifer target levels: 1 test
+  - Barrier noise leak prevention & dry cavern dams: 1 test
+  - Natural unflooded dry cave pockets & water/lava aquifers: 1 test
+  - Bedrock immunity in aquifer substance evaluation: 1 test
 * **`crates/mc_items` (5 tests)**:
   - Complete 1,329+ `ItemId` name roundtrip: 1 test
   - Tool tier attributes (durability, attack damage, speed): 2 tests

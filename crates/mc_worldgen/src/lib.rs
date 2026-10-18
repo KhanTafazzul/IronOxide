@@ -1,8 +1,14 @@
+pub mod aquifers;
 pub mod biomes;
 pub mod carvers;
 pub mod seed_pipeline;
 pub mod structures;
 
+pub use aquifers::{
+    grid_x, grid_y, grid_z, Aquifer, AquiferFluidType, AquiferGridSampler, AquiferSubstance,
+    BarrierNoiseSampler, CellAnchor, FluidStatus, NoiseBasedAquifer, CELL_SIZE_X, CELL_SIZE_Y,
+    CELL_SIZE_Z, LAVA_BARRIER_Y,
+};
 pub use biomes::{BiomeCategory, BiomeId, SurfaceBlock, SurfaceRuleEngine, TerracottaBands};
 pub use carvers::{
     carve_block, carve_chunk_slice, CanyonCarverConfiguration, CanyonWorldCarver,

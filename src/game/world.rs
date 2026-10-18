@@ -36,9 +36,9 @@ impl World {
         }
     }
 
-    /// Advances weather simulation by 1 game tick
+    /// Advances weather simulation by 1 game tick (cycle timers + smooth visual transitions)
     pub fn tick_weather(&mut self) {
-        self.weather.tick();
+        self.weather.tick_weather_cycle();
     }
 
     /// Ticks cellular automaton fluid simulation and returns affected section coordinates

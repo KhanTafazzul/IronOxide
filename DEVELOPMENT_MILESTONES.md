@@ -3,8 +3,8 @@
 
 > **Project Goal**: Re-implement Minecraft 1.20.4 client and voxel engine from scratch in **Rust** using **WGPU** and **WGSL** shaders by reverse-engineering `client.jar` using decompilation and exact vanilla algorithms.
 >
-> **Status**: **327 / 327 Unit & Integration Tests Passing (179 in IronOxide, 90 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay, 45 in mc_entities)**
-> **Last Updated**: Task 52: Aquatic, Amphibious & Nether Fluid Mobs Completed & Verified.
+> **Status**: **337 / 337 Unit & Integration Tests Passing (179 in IronOxide, 90 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay, 55 in mc_entities)**
+> **Last Updated**: Task 53: Villager Profession Schedule, Trading & Golems Completed & Verified.
 
 ---
 
@@ -12,6 +12,7 @@
 
 | Task / Feature | Module / Location | Status | Key Highlights |
 |---|---|---|---|
+| **Task 53: Villager Profession Schedule, Trading & Golems** | `crates/mc_entities/src/villagers/` | Done | Daily POI schedule (Work 2000-9000, Gather 9000-11000, Sleep 12000-0), Nitwit schedule, 15 professions, Novice-to-Master leveling, 2x daily restocks, permanent XP locking, Iron Golem flinging & 4-stage cracking, Snow Golem snow trail & snowball defense, Wandering Trader 10-12 day spawner & invisibility |
 | **Task 52: Aquatic, Amphibious & Fluid Mobs** | `crates/mc_entities/src/aquatic/` | Done | WaterPathNavigation 3D swim with drag & breath drowning/suffocation meters, Cod/Salmon Boids flocking & upstream leaps, Pufferfish 3 puff stages & contact poison, TropicalFish procedural presets, Squid/GlowSquid periodic jet propulsion & ink defense, Turtle home beach egg laying & scute shedding, Frog 3 climate variants & froglight drops, Tadpole metamorphosis, Axolotl 5 variants with playing dead regeneration, Strider lava ocean walking & cold shivering penalty |
 | **Task 51: Passive Land Mammals & Birds** | `crates/mc_entities/src/passive/` | Done | 100% complete passive animals: Farm (Cow, Pig, Sheep with 16 dye colors & wool regrowth, Chicken with egg timer), Pets & Tameables (Wolf, Cat with creeper repel, Ocelot, Parrot with shoulder perch & cookie poison), Wild & Utility (Fox night hunting & mouth items, Armadillo shell rolling, Camel 2-player ride & dash, Sniffer ancient seed digging, Allay item fetching & duplication, Horse/Donkey/Mule, Panda 7 genetics alleles, PolarBear, Rabbit, Bat) |
 | **Task 50: Mob ECS & GoalSelector AI Engine** | `crates/mc_entities/src/ai/`, `crates/mc_entities/src/components.rs` | Done | Vanilla GoalSelector priority preemption, bitmask GoalFlags conflict resolution, 3D path navigation (1-block step up, safe drop downs, door handling, fire/lava avoidance), Melee/Ranged/Panic/Tempt/Breed/Float AI goals |
@@ -1135,7 +1136,19 @@ When resuming next, execution will start directly from **Task 33**:
 +          * `Tadpole` (`bzq.class`): Water-breathing baby stage, bucketable into `TadpoleBucket`, slime ball growth acceleration, temperature-based metamorphosis into appropriate Frog variant.
 +          * `Axolotl` (`bzf.class`): 5 variants (`Lucy`, `Wild`, `Gold`, `Cyan`, `Blue` 1/1200). Bucketable into `AxolotlBucket`. Self-preservation "playing dead" state machine (200 ticks = 10s) triggered when taking damage underwater while health < 50%; floats motionless, gains untargetable status from hostile mobs, and heals via Regeneration I. Actively hunts fish, squid, and drowned.
 +          * `Strider` (`cdc.class`): Nether fluid mob walking across lava oceans without sinking. Shivering state (`is_cold = true`, purple-gray color) outside lava with ~65% speed penalty (0.3 -> 0.105). Equippable with `ItemId::Saddle`, steerable by rider, and boosted with `ItemId::WarpedFungusOnAStick` (1.5x speed). Water/rain environmental damage (1 HP per second). Drops String and equipped Saddle on death.
-+        - Validated with 11 comprehensive tests in `crates/mc_entities/tests/aquatic_test.rs` (327 total passing tests across workspace).
++        - Validated with 11 comprehensive tests in `crates/mc_entities/tests/aquatic_test.rs`.
++
++    16. **Task 53: Villager Profession Schedule, Trading & Golems (`crates/mc_entities/src/villagers/`)**:
++        - Reverse-engineered villager daily routines, workstation bindings, trade matrices, and golem defenses from `client.jar`:
++          * `VillagerSchedule` (`cev.class`, `bxe.class`): Daily 0..24,000 tick schedule state machine. Standard schedule: Rest (0..2000), Work at workstation POI (2000..9000), Gather at village meeting bell (9000..11000), Rest (11000..12000), Sleep in claimed bed (12000..24000). Nitwit schedule: Sleeps in late (until 3000), wanders during normal work hours, stays up late until 14000. Panic overrides schedule and wakes from bed.
++          * `VillagerProfession` & `VillagerCareer` (`cey.class`, `cew.class`): 15 professions (Armorer, Butcher, Cartographer, Cleric, Farmer, Fisherman, Fletcher, Leatherworker, Librarian, Mason, Nitwit, Shepherd, Toolsmith, Weaponsmith, None). Unemployed villagers dynamically bind to nearest unclaimed workstation block. Breaking workstation before trading reverts to Unemployed; gaining trade XP (> 0) permanently locks profession.
++          * `TradeLevel` & Matrix (`cez.class`, `cfd.class`): 5-tier leveling matrix (Novice 0 XP, Apprentice 10 XP, Journeyman 70 XP, Expert 150 XP, Master 250 XP). Complete authentic trade offers generated for all 13 working professions. Uses and max_uses tracking, locking on exhaustion, and restocking twice daily during Work schedule at workstation (reset at dawn).
++          * `VillagerGossip` & Breeding (`cfs.class`): Reputation tracking (+2 on trade, +20 for curing, -10 on damage), golem talk tallies during Gather. Food breeding with bread/carrots/potatoes/beetroots (12 food points threshold) triggering love mode.
++          * `IronGolem` (`byk.class`): 100 HP, 1.0 Knockback Resistance. Village summon checks: $\ge 3$ panicked villagers within 10s or $\ge 5$ gossiping villagers with 3 claimed beds. Upward fling attack dealing 14 damage and 0.45 vertical toss. 4-stage visual cracking (`None` > 75%, `Low` 50-75%, `Medium` 25-50%, `High` < 25%). Repaired with `ItemId::IronIngot` (+25 HP per ingot). Target filters protecting villagers from hostile monsters.
++          * `SnowGolem` (`byw.class`): 4 HP. Lays snow layer trails on ground. Melts in warm biomes (temperature > 0.8) and in rain/water (1.0 damage/s). Throws snowballs at hostiles within 16 blocks (20-tick cooldown, vertical arc). Shearing with `ItemId::Shears` removes carved pumpkin helmet, dropping `ItemId::CarvedPumpkin`.
++          * `WanderingTrader` (`cfb.class`, `cfc.class`): 10-12 day spawner guaranteeing spawn after 12 in-game days with 2 Trader Llamas attached by `ItemId::Lead`. Drinks Potion of Invisibility at night (ticks $\ge 12000$) or under threat, and drinks Milk Bucket at dawn to clear invisibility. Despawn timer (48,000 ticks = 2 days). Unique exotic trade pool.
++        - Validated with 10 comprehensive tests in `crates/mc_entities/tests/villagers_test.rs` (337 total passing tests across workspace).
+
 
 +
  ---

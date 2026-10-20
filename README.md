@@ -6,7 +6,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Language: Rust 2024](https://img.shields.io/badge/Language-Rust_2024-orange.svg)](https://www.rust-lang.org/)
 [![Graphics: WGPU](https://img.shields.io/badge/Graphics-WGPU_/_WGSL-green.svg)](https://wgpu.rs/)
-[![Tests: 327 Passing](https://img.shields.io/badge/Tests-327_Passed-brightgreen.svg)]()
+[![Tests: 337 Passing](https://img.shields.io/badge/Tests-337_Passed-brightgreen.svg)]()
 [![Parity: Minecraft 1.20.4](https://img.shields.io/badge/Parity-Minecraft_1.20.4-red.svg)](https://minecraft.net/)
 
 ---
@@ -61,7 +61,7 @@ IronOxide/
 │   ├── mc_items/       # 1,329+ item enum registry, tool harvest levels, and armor tiers
 │   ├── mc_crafting/    # Serde shaped/shapeless recipe parser (822 recipes from client.jar) & O(1) cache
 │   ├── mc_gameplay/    # Workstations engine (Crafting Table, Furnaces, Anvil, Smithing)
-│   ├── mc_entities/    # Mob ECS, GoalSelector AI, 3D navigation, Land & Aquatic Mobs
+│   ├── mc_entities/    # Mob ECS, GoalSelector AI, 3D navigation, Land/Aquatic Mobs, Villagers & Golems
 └── src/
     ├── render/         # WGPU pipeline, greedy mesher, dynamic lighting, weather & HUD
     ├── game/           # Player physics, raycasting, survival stats, portals & mob AI
@@ -86,7 +86,7 @@ IronOxide/
 git clone https://github.com/KhanTafazzul/IronOxide.git
 cd IronOxide
 
-# Run the automated test suite (327 tests)
+# Run the automated test suite (337 tests)
 cargo test --workspace
 
 # Launch the client in optimized release mode

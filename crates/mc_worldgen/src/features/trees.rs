@@ -58,6 +58,9 @@ pub fn is_replaceable_for_tree(block: SurfaceBlock) -> bool {
             | SurfaceBlock::DarkOakLeaves
             | SurfaceBlock::JungleLeaves
             | SurfaceBlock::AcaciaLeaves
+            | SurfaceBlock::PaleOakLeaves
+            | SurfaceBlock::PaleMossCarpet
+            | SurfaceBlock::PaleHangingMoss
     )
 }
 
@@ -66,7 +69,12 @@ pub fn is_replaceable_for_tree(block: SurfaceBlock) -> bool {
 pub fn is_valid_tree_soil(block: SurfaceBlock) -> bool {
     matches!(
         block,
-        SurfaceBlock::GrassBlock | SurfaceBlock::Dirt | SurfaceBlock::Podzol | SurfaceBlock::CoarseDirt | SurfaceBlock::Mud
+        SurfaceBlock::GrassBlock
+            | SurfaceBlock::Dirt
+            | SurfaceBlock::Podzol
+            | SurfaceBlock::CoarseDirt
+            | SurfaceBlock::Mud
+            | SurfaceBlock::PaleMossBlock
     )
 }
 
@@ -997,6 +1005,7 @@ pub enum TreeSpecies {
     MegaJungle,
     Acacia,
     DarkOak,
+    PaleOak,
 }
 
 impl TreeSpecies {
@@ -1008,6 +1017,7 @@ impl TreeSpecies {
             Self::MegaJungle => SurfaceBlock::JungleLog,
             Self::Acacia => SurfaceBlock::AcaciaLog,
             Self::DarkOak => SurfaceBlock::DarkOakLog,
+            Self::PaleOak => SurfaceBlock::PaleOakLog,
         }
     }
 
@@ -1019,6 +1029,7 @@ impl TreeSpecies {
             Self::MegaJungle => SurfaceBlock::JungleLeaves,
             Self::Acacia => SurfaceBlock::AcaciaLeaves,
             Self::DarkOak => SurfaceBlock::DarkOakLeaves,
+            Self::PaleOak => SurfaceBlock::PaleOakLeaves,
         }
     }
 }
@@ -1123,6 +1134,10 @@ impl TreeFeature {
                     leaves_placed += foliage.place_foliage(world, att, leaves, rng);
                 }
                 (logs, leaves_placed)
+            }
+            TreeSpecies::PaleOak => {
+                let res = crate::biomes::pale_garden::generate_pale_oak_tree(world, origin, rng, false);
+                (res.logs_placed, res.leaves_placed + res.moss_vines_placed)
             }
         }
     }

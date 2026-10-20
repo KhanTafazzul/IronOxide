@@ -16,6 +16,7 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use std::io::{Read, Write};
 
+use mc_worldgen::TemplatePoolRegistry;
 use crate::world::block_registry::BlockId;
 use crate::game::physics::Aabb;
 
@@ -442,6 +443,40 @@ impl JigsawPlacement {
             .push(template_name.into());
     }
 
+    /// Loads and registers dynamic template pool definitions from `TemplatePoolRegistry`.
+    pub fn register_from_pool_registry(&mut self, registry: &TemplatePoolRegistry) {
+        for pool_id in [
+            "village/plains/town_centers",
+            "village/plains/streets",
+            "village/plains/houses",
+            "village/plains/terminators",
+            "village/savanna/town_centers",
+            "village/savanna/streets",
+            "village/savanna/houses",
+            "village/savanna/terminators",
+            "village/desert/town_centers",
+            "village/desert/streets",
+            "village/desert/houses",
+            "village/desert/terminators",
+            "woodland_mansion/entrance",
+            "woodland_mansion/corridors",
+            "woodland_mansion/rooms_floor1",
+            "trial_chambers/corridor",
+            "trial_chambers/hallway",
+            "trial_chambers/chamber/addon",
+            "trial_chambers/spawner/all",
+        ] {
+            if let Some(pool) = registry.get_pool(pool_id) {
+                for entry in &pool.elements {
+                    if let Some(loc) = &entry.element.location {
+                        let clean = loc.strip_prefix("minecraft:").unwrap_or(loc);
+                        self.add_to_pool(pool_id, clean);
+                    }
+                }
+            }
+        }
+    }
+
     /// Assembles structure starting from a root template at `start_pos`
     pub fn assemble(&mut self, start_template_name: &str, start_pos: IVec3, start_rot: Rotation) -> bool {
         let root_template = match self.templates.get(start_template_name) {
@@ -756,7 +791,9 @@ impl PlainsVillageGenerator {
         });
         engine.register_template(farm);
 
-        // Register pools
+        // Register dynamic pools from TemplatePoolRegistry
+        let registry = TemplatePoolRegistry::load_default();
+        engine.register_from_pool_registry(&registry);
         engine.add_to_pool("village/plains/streets", "village/plains/street_straight");
         engine.add_to_pool("village/plains/buildings", "village/plains/cottage");
         engine.add_to_pool("village/plains/buildings", "village/plains/farm");
@@ -774,6 +811,207 @@ impl PlainsVillageGenerator {
             }
         }
 
+        engine
+    }
+}
+
+/// Savanna Village Structure Generator
+pub struct SavannaVillageGenerator;
+
+impl SavannaVillageGenerator {
+    pub fn build_village<H: Fn(i32, i32) -> i32, W: FnMut(IVec3, BlockId)>(
+        center_x: i32,
+        center_z: i32,
+        get_height: &H,
+        set_block: &mut W,
+    ) -> JigsawPlacement {
+        let mut engine = JigsawPlacement::new(5);
+        let registry = TemplatePoolRegistry::load_default();
+        engine.register_from_pool_registry(&registry);
+
+        // Town Center
+        let mut meeting = StructureTemplate::new("village/savanna/town_center", IVec3::new(7, 5, 7));
+        for x in 0..7 {
+            for z in 0..7 {
+                meeting.add_block(IVec3::new(x, 0, z), BlockId::Dirt);
+            }
+        }
+        meeting.add_block(IVec3::new(3, 1, 3), BlockId::Cobblestone);
+        meeting.add_block(IVec3::new(3, 2, 3), BlockId::OakLog);
+        meeting.add_block(IVec3::new(3, 3, 3), BlockId::Torch);
+
+        meeting.add_joint(JigsawJoint {
+            name: "meeting_north".to_string(),
+            target: "village/savanna/streets".to_string(),
+            local_pos: IVec3::new(3, 1, 0),
+            facing: JigsawDirection::North,
+            joint_type: JointType::Aligned,
+            final_state: BlockId::Dirt,
+        });
+        meeting.add_joint(JigsawJoint {
+            name: "meeting_south".to_string(),
+            target: "village/savanna/streets".to_string(),
+            local_pos: IVec3::new(3, 1, 6),
+            facing: JigsawDirection::South,
+            joint_type: JointType::Aligned,
+            final_state: BlockId::Dirt,
+        });
+        engine.register_template(meeting);
+
+        // Savanna Street
+        let mut street = StructureTemplate::new("village/savanna/street_straight", IVec3::new(3, 1, 6));
+        for x in 0..3 {
+            for z in 0..6 {
+                street.add_block(IVec3::new(x, 0, z), BlockId::Dirt);
+            }
+        }
+        street.add_joint(JigsawJoint {
+            name: "street_in".to_string(),
+            target: "village/savanna/streets".to_string(),
+            local_pos: IVec3::new(1, 0, 5),
+            facing: JigsawDirection::South,
+            joint_type: JointType::Aligned,
+            final_state: BlockId::Dirt,
+        });
+        street.add_joint(JigsawJoint {
+            name: "street_side".to_string(),
+            target: "village/savanna/buildings".to_string(),
+            local_pos: IVec3::new(2, 0, 3),
+            facing: JigsawDirection::East,
+            joint_type: JointType::Aligned,
+            final_state: BlockId::Dirt,
+        });
+        engine.register_template(street);
+
+        // Savanna House
+        let mut house = StructureTemplate::new("village/savanna/house", IVec3::new(5, 4, 5));
+        for x in 0..5 {
+            for z in 0..5 {
+                house.add_block(IVec3::new(x, 0, z), BlockId::Cobblestone);
+                house.add_block(IVec3::new(x, 3, z), BlockId::OakPlanks);
+            }
+        }
+        house.add_joint(JigsawJoint {
+            name: "house_door".to_string(),
+            target: "village/savanna/buildings".to_string(),
+            local_pos: IVec3::new(2, 0, 0),
+            facing: JigsawDirection::North,
+            joint_type: JointType::Aligned,
+            final_state: BlockId::Cobblestone,
+        });
+        engine.register_template(house);
+
+        engine.add_to_pool("village/savanna/streets", "village/savanna/street_straight");
+        engine.add_to_pool("village/savanna/buildings", "village/savanna/house");
+
+        let ground_y = get_height(center_x, center_z);
+        let start_pos = IVec3::new(center_x, ground_y, center_z);
+        engine.assemble("village/savanna/town_center", start_pos, Rotation::None);
+
+        for piece in &engine.placed_pieces {
+            for (w_pos, block) in &piece.blocks {
+                set_block(*w_pos, *block);
+            }
+        }
+        engine
+    }
+}
+
+/// Desert Village Structure Generator
+pub struct DesertVillageGenerator;
+
+impl DesertVillageGenerator {
+    pub fn build_village<H: Fn(i32, i32) -> i32, W: FnMut(IVec3, BlockId)>(
+        center_x: i32,
+        center_z: i32,
+        get_height: &H,
+        set_block: &mut W,
+    ) -> JigsawPlacement {
+        let mut engine = JigsawPlacement::new(5);
+        let registry = TemplatePoolRegistry::load_default();
+        engine.register_from_pool_registry(&registry);
+
+        // Town Center
+        let mut center = StructureTemplate::new("village/desert/town_center", IVec3::new(5, 5, 5));
+        for x in 0..5 {
+            for z in 0..5 {
+                center.add_block(IVec3::new(x, 0, z), BlockId::Cobblestone);
+            }
+        }
+        center.add_block(IVec3::new(2, 1, 2), BlockId::Water);
+        center.add_joint(JigsawJoint {
+            name: "center_north".to_string(),
+            target: "village/desert/streets".to_string(),
+            local_pos: IVec3::new(2, 1, 0),
+            facing: JigsawDirection::North,
+            joint_type: JointType::Aligned,
+            final_state: BlockId::Cobblestone,
+        });
+        center.add_joint(JigsawJoint {
+            name: "center_east".to_string(),
+            target: "village/desert/streets".to_string(),
+            local_pos: IVec3::new(4, 1, 2),
+            facing: JigsawDirection::East,
+            joint_type: JointType::Aligned,
+            final_state: BlockId::Cobblestone,
+        });
+        engine.register_template(center);
+
+        // Desert Street
+        let mut street = StructureTemplate::new("village/desert/street_straight", IVec3::new(3, 1, 5));
+        for x in 0..3 {
+            for z in 0..5 {
+                street.add_block(IVec3::new(x, 0, z), BlockId::Sand);
+            }
+        }
+        street.add_joint(JigsawJoint {
+            name: "street_in".to_string(),
+            target: "village/desert/streets".to_string(),
+            local_pos: IVec3::new(1, 0, 4),
+            facing: JigsawDirection::South,
+            joint_type: JointType::Aligned,
+            final_state: BlockId::Sand,
+        });
+        street.add_joint(JigsawJoint {
+            name: "street_side".to_string(),
+            target: "village/desert/buildings".to_string(),
+            local_pos: IVec3::new(2, 0, 2),
+            facing: JigsawDirection::East,
+            joint_type: JointType::Aligned,
+            final_state: BlockId::Sand,
+        });
+        engine.register_template(street);
+
+        // Desert House
+        let mut house = StructureTemplate::new("village/desert/house", IVec3::new(5, 4, 5));
+        for x in 0..5 {
+            for z in 0..5 {
+                house.add_block(IVec3::new(x, 0, z), BlockId::Cobblestone);
+                house.add_block(IVec3::new(x, 3, z), BlockId::Sand);
+            }
+        }
+        house.add_joint(JigsawJoint {
+            name: "house_door".to_string(),
+            target: "village/desert/buildings".to_string(),
+            local_pos: IVec3::new(2, 0, 0),
+            facing: JigsawDirection::North,
+            joint_type: JointType::Aligned,
+            final_state: BlockId::Cobblestone,
+        });
+        engine.register_template(house);
+
+        engine.add_to_pool("village/desert/streets", "village/desert/street_straight");
+        engine.add_to_pool("village/desert/buildings", "village/desert/house");
+
+        let ground_y = get_height(center_x, center_z);
+        let start_pos = IVec3::new(center_x, ground_y, center_z);
+        engine.assemble("village/desert/town_center", start_pos, Rotation::None);
+
+        for piece in &engine.placed_pieces {
+            for (w_pos, block) in &piece.blocks {
+                set_block(*w_pos, *block);
+            }
+        }
         engine
     }
 }
@@ -886,7 +1124,11 @@ impl WoodlandMansionGenerator {
         });
         engine.register_template(maze);
 
-        // Pools
+        // Dynamic template pool integration
+        let registry = TemplatePoolRegistry::load_default();
+        engine.register_from_pool_registry(&registry);
+        engine.add_to_pool("woodland_mansion/corridors", "mansion/library");
+        engine.add_to_pool("woodland_mansion/rooms_floor1", "mansion/bedroom");
         engine.add_to_pool("mansion/rooms_floor1", "mansion/library");
         engine.add_to_pool("mansion/rooms_floor1", "mansion/bedroom");
         engine.add_to_pool("mansion/rooms_floor1", "mansion/maze");
@@ -934,6 +1176,95 @@ impl WoodlandMansionGenerator {
                 template.add_block(IVec3::new(x, size.y - 1, z), BlockId::DarkOakPlanks);
             }
         }
+    }
+}
+
+/// Trial Chambers Structure Generator
+pub struct TrialChambersGenerator;
+
+impl TrialChambersGenerator {
+    pub fn build_chambers<W: FnMut(IVec3, BlockId)>(
+        origin: IVec3,
+        set_block: &mut W,
+    ) -> JigsawPlacement {
+        let mut engine = JigsawPlacement::new(6);
+        let registry = TemplatePoolRegistry::load_default();
+        engine.register_from_pool_registry(&registry);
+
+        // 1. Entrance Corridor
+        let mut corridor = StructureTemplate::new("trial_chambers/corridor", IVec3::new(5, 5, 8));
+        for x in 0..5 {
+            for z in 0..8 {
+                corridor.add_block(IVec3::new(x, 0, z), BlockId::Deepslate);
+                corridor.add_block(IVec3::new(x, 4, z), BlockId::Cobblestone);
+            }
+        }
+        corridor.add_joint(JigsawJoint {
+            name: "corridor_forward".to_string(),
+            target: "trial_chambers/hallway".to_string(),
+            local_pos: IVec3::new(2, 1, 7),
+            facing: JigsawDirection::South,
+            joint_type: JointType::Aligned,
+            final_state: BlockId::Deepslate,
+        });
+        engine.register_template(corridor);
+
+        // 2. Hallway
+        let mut hallway = StructureTemplate::new("trial_chambers/hallway", IVec3::new(5, 5, 6));
+        for x in 0..5 {
+            for z in 0..6 {
+                hallway.add_block(IVec3::new(x, 0, z), BlockId::Deepslate);
+                hallway.add_block(IVec3::new(x, 4, z), BlockId::Cobblestone);
+            }
+        }
+        hallway.add_joint(JigsawJoint {
+            name: "hallway_in".to_string(),
+            target: "trial_chambers/hallway".to_string(),
+            local_pos: IVec3::new(2, 1, 0),
+            facing: JigsawDirection::North,
+            joint_type: JointType::Aligned,
+            final_state: BlockId::Deepslate,
+        });
+        hallway.add_joint(JigsawJoint {
+            name: "spawner_door".to_string(),
+            target: "trial_chambers/spawner/all".to_string(),
+            local_pos: IVec3::new(4, 1, 3),
+            facing: JigsawDirection::East,
+            joint_type: JointType::Aligned,
+            final_state: BlockId::Deepslate,
+        });
+        engine.register_template(hallway);
+
+        // 3. Spawner Room
+        let mut spawner_room = StructureTemplate::new("trial_chambers/spawner_room", IVec3::new(7, 5, 7));
+        for x in 0..7 {
+            for z in 0..7 {
+                spawner_room.add_block(IVec3::new(x, 0, z), BlockId::Deepslate);
+                spawner_room.add_block(IVec3::new(x, 4, z), BlockId::Cobblestone);
+            }
+        }
+        spawner_room.add_block(IVec3::new(3, 1, 3), BlockId::Torch);
+        spawner_room.add_joint(JigsawJoint {
+            name: "spawner_entry".to_string(),
+            target: "trial_chambers/spawner/all".to_string(),
+            local_pos: IVec3::new(0, 1, 3),
+            facing: JigsawDirection::West,
+            joint_type: JointType::Aligned,
+            final_state: BlockId::Deepslate,
+        });
+        engine.register_template(spawner_room);
+
+        engine.add_to_pool("trial_chambers/hallway", "trial_chambers/hallway");
+        engine.add_to_pool("trial_chambers/spawner/all", "trial_chambers/spawner_room");
+
+        engine.assemble("trial_chambers/corridor", origin, Rotation::None);
+
+        for piece in &engine.placed_pieces {
+            for (w_pos, block) in &piece.blocks {
+                set_block(*w_pos, *block);
+            }
+        }
+        engine
     }
 }
 
@@ -1096,5 +1427,51 @@ mod tests {
         assert!(has_dark_oak_log, "Mansion must contain Dark Oak logs");
         assert!(has_dark_oak_planks, "Mansion must contain Dark Oak planks");
         assert!(has_cobblestone, "Mansion must contain Cobblestone foundation");
+    }
+
+    #[test]
+    fn test_savanna_village_generation() {
+        let mut world = HashMap::<IVec3, BlockId>::new();
+        let mut set_block = |pos, block| {
+            world.insert(pos, block);
+        };
+        let get_height = |_x, _z| 68;
+
+        let village = SavannaVillageGenerator::build_village(300, 300, &get_height, &mut set_block);
+        assert!(!village.placed_pieces.is_empty(), "Savanna village should place pieces");
+        let town_center = &village.placed_pieces[0];
+        assert_eq!(town_center.template_name, "village/savanna/town_center");
+        assert_eq!(town_center.world_origin.y, 68);
+    }
+
+    #[test]
+    fn test_desert_village_generation() {
+        let mut world = HashMap::<IVec3, BlockId>::new();
+        let mut set_block = |pos, block| {
+            world.insert(pos, block);
+        };
+        let get_height = |_x, _z| 64;
+
+        let village = DesertVillageGenerator::build_village(400, 400, &get_height, &mut set_block);
+        assert!(!village.placed_pieces.is_empty(), "Desert village should place pieces");
+        let center = &village.placed_pieces[0];
+        assert_eq!(center.template_name, "village/desert/town_center");
+        assert_eq!(center.world_origin.y, 64);
+    }
+
+    #[test]
+    fn test_trial_chambers_generation() {
+        let mut world = HashMap::<IVec3, BlockId>::new();
+        let mut set_block = |pos, block| {
+            world.insert(pos, block);
+        };
+        let origin = IVec3::new(100, -20, 100);
+
+        let chambers = TrialChambersGenerator::build_chambers(origin, &mut set_block);
+        assert!(!chambers.placed_pieces.is_empty(), "Trial chambers should place pieces");
+        let corridor = &chambers.placed_pieces[0];
+        assert_eq!(corridor.template_name, "trial_chambers/corridor");
+        assert_eq!(corridor.world_origin, origin);
+        assert!(world.values().any(|&b| b == BlockId::Deepslate));
     }
 }

@@ -6,6 +6,7 @@ pub mod locator;
 pub mod mineshaft;
 pub mod nether_fortress;
 pub mod ocean_monument;
+pub mod template_pool;
 
 pub use bastion::{BastionRemnantGenerator, BastionType};
 pub use buried_treasure::BuriedTreasureGenerator;
@@ -16,3 +17,7 @@ pub use locator::{
 pub use mineshaft::{MineshaftGenerator, MineshaftType};
 pub use nether_fortress::NetherFortressGenerator;
 pub use ocean_monument::OceanMonumentGenerator;
+pub use template_pool::{
+    JigsawStructureAssembler, PlacedJigsawPiece, PoolElement, PoolProjection,
+    StructureTemplatePool, TemplatePoolEntry, TemplatePoolRegistry, WeightedAliasTable,
+};

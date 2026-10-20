@@ -153,8 +153,8 @@ impl WorldStorageManager {
         }
     }
 
-    /// Internal helper: snapshot chunk column sections and dispatch to background saver
-    fn save_chunk_async(&self, cx: i32, cz: i32, world: &World) {
+    /// Helper: snapshot chunk column sections and dispatch to background saver
+    pub fn save_chunk_async(&self, cx: i32, cz: i32, world: &World) {
         let mut column_sections = Vec::new();
 
         for (&pos, section) in &world.sections {

@@ -4,9 +4,12 @@ pub mod carvers;
 pub mod features;
 pub mod ores;
 pub mod seed_pipeline;
+pub mod pipeline;
 pub mod structures;
 pub mod surface;
 pub mod vegetation;
+
+pub use pipeline::{generate_chunk_column_pipeline, ChunkColumnBuffer, CHUNK_HEIGHT, CHUNK_VOLUME, CHUNK_WIDTH};
 
 pub use ores::{
     coal_lower_distribution, coal_upper_distribution, copper_dripstone_distribution,
@@ -23,9 +26,14 @@ pub use vegetation::{
     GroundCoverPlacer, SpruceFoliagePlacer, StraightTrunkPlacer, TreePlacer, TreeType,
 };
 pub use features::{
-    AcaciaFoliagePlacer, DarkOakTrunkPlacer, FancyTrunkPlacer, FoliagePlacer, ForkingTrunkPlacer,
-    MegaJungleTrunkPlacer, MegaPineFoliagePlacer, TreeFeature, TreeSpecies, TrunkPlacer,
-    VegetationConfig, VegetationFeature, VegetationPlacementStats,
+    AcaciaFoliagePlacer, BiomeFeatureRegistry, DarkOakTrunkPlacer, DecorationStep,
+    FancyTrunkPlacer, FoliagePlacer, ForkingTrunkPlacer, HeightRangeDef, IntProviderDef,
+    MegaJungleTrunkPlacer, MegaPineFoliagePlacer, PlacedFeatureDef, PlacementModifierDef,
+    TreeFeature, TreeSpecies, TrunkPlacer, VegetationConfig, VegetationFeature,
+    VegetationPlacementStats, VerticalAnchorDef, decorate_chunk, FLUID_SPRINGS, LAKES,
+    LOCAL_MODIFICATIONS, RAW_GENERATION, STRONGHOLDS, SURFACE_STRUCTURES,
+    TOP_LAYER_MODIFICATION, TOTAL_DECORATION_STEPS, UNDERGROUND_DECORATION,
+    UNDERGROUND_ORES, UNDERGROUND_STRUCTURES, VEGETAL_DECORATION,
 };
 
 pub use aquifers::{
@@ -33,7 +41,17 @@ pub use aquifers::{
     BarrierNoiseSampler, CellAnchor, FluidStatus, NoiseBasedAquifer, CELL_SIZE_X, CELL_SIZE_Y,
     CELL_SIZE_Z, LAVA_BARRIER_Y,
 };
-pub use biomes::{BiomeCategory, BiomeId, SurfaceBlock, SurfaceRuleEngine, TerracottaBands};
+pub use biomes::{
+    generate_pale_oak_tree, is_pale_garden_climate, is_valid_pale_oak_soil, pale_garden_fitness,
+    BiomeCategory, BiomeId, PaleGardenAtmosphere, PaleOakTreeResult, SurfaceBlock,
+    SurfaceRuleEngine, TerracottaBands, PALE_GARDEN_CLIMATE, PALE_GARDEN_FOG_COLOR,
+    PALE_GARDEN_FOLIAGE_COLOR, PALE_GARDEN_GRASS_COLOR, PALE_GARDEN_SKY_COLOR,
+    PALE_GARDEN_WATER_COLOR, PALE_GARDEN_WATER_FOG_COLOR,
+};
+pub use features::{
+    decorate_pale_garden_vegetation, CreakingDamageResult, CreakingHeartAction, CreakingHeartAxis,
+    CreakingHeartDormancy, CreakingHeartTileEntity, CREAKING_HEART_CHANCE_PERCENT,
+};
 pub use carvers::{
     carve_block, carve_chunk_slice, CanyonCarverConfiguration, CanyonWorldCarver,
     CarveResult, CarverConfiguration, CaveCarverRouter, CaveType, CheeseCaveSampler,
@@ -44,12 +62,15 @@ pub use seed_pipeline::density::{BlendedNoise, CaveNoiseRouter, NoiseRouter, ver
 pub use seed_pipeline::noise::{ImprovedNoise, NormalNoise, PerlinNoise};
 pub use seed_pipeline::random::{
     mix_stafford13, seed_from_hash_of, upgrade_seed_to_128bit, PositionalRandomFactory,
-    Xoroshiro128PlusPlus, GOLDEN_RATIO_64, SILVER_RATIO_64,
+    set_decoration_seed, set_feature_seed, WorldgenRandom, Xoroshiro128PlusPlus, GOLDEN_RATIO_64,
+    SILVER_RATIO_64,
 };
 pub use seed_pipeline::terrain::{ChunkSectionDensity, OverworldGenerator, MAX_Y, MIN_Y, SEA_LEVEL};
 pub use structures::{
     BastionRemnantGenerator, BastionType, BuriedTreasureGenerator, ChunkPos,
-    ConcentricRingsPlacement, LegacyRandom, MineshaftGenerator, MineshaftType,
-    NetherFortressGenerator, OceanMonumentGenerator, RandomSpreadPlacement, SpreadType,
-    StructureLocator, StructureRoot, StructureType,
+    ConcentricRingsPlacement, JigsawStructureAssembler, LegacyRandom, MineshaftGenerator,
+    MineshaftType, NetherFortressGenerator, OceanMonumentGenerator, PlacedJigsawPiece,
+    PoolElement, PoolProjection, RandomSpreadPlacement, SpreadType, StructureLocator,
+    StructureRoot, StructureTemplatePool, StructureType, TemplatePoolEntry, TemplatePoolRegistry,
+    WeightedAliasTable,
 };

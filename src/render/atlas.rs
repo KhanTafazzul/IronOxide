@@ -471,6 +471,20 @@ impl TextureAtlas {
             },
             BlockType::DarkOakLeaves => "dark_oak_leaves",
 
+            BlockType::PaleOakPlanks => "pale_oak_planks",
+            BlockType::PaleOakLog | BlockType::PaleOakWood => match face {
+                Direction::Up | Direction::Down => "pale_oak_log_top",
+                _ => "pale_oak_log",
+            },
+            BlockType::PaleOakLeaves => "pale_oak_leaves",
+            BlockType::PaleMossBlock => "pale_moss_block",
+            BlockType::PaleMossCarpet => "pale_moss_carpet",
+            BlockType::PaleHangingMoss => "pale_hanging_moss",
+            BlockType::CreakingHeart => match face {
+                Direction::Up | Direction::Down => "creaking_heart_top",
+                _ => "creaking_heart",
+            },
+
             BlockType::Andesite => "andesite",
             BlockType::Granite => "granite",
             BlockType::Diorite => "diorite",

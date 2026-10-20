@@ -141,6 +141,8 @@ pub struct LevelData {
     pub spawn_z: i32,
     /// Player state snapshot
     pub player: PlayerData,
+    /// World generation seed (RandomSeed)
+    pub seed: i64,
 }
 
 impl Default for LevelData {
@@ -154,6 +156,7 @@ impl Default for LevelData {
             spawn_y: 64,
             spawn_z: 8,
             player: PlayerData::default(),
+            seed: 123456789,
         }
     }
 }
@@ -219,6 +222,21 @@ impl LevelData {
             }
         };
 
+        let seed = data_map
+            .get("RandomSeed")
+            .or_else(|| {
+                data_map
+                    .get("WorldGenSettings")
+                    .and_then(|t| t.as_compound())
+                    .and_then(|w| w.get("seed"))
+            })
+            .and_then(|t| match t {
+                NbtTag::Long(l) => Some(*l),
+                NbtTag::Int(i) => Some(*i as i64),
+                _ => None,
+            })
+            .unwrap_or(123456789);
+
         Ok(Self {
             level_name,
             game_type,
@@ -228,6 +246,7 @@ impl LevelData {
             spawn_y,
             spawn_z,
             player,
+            seed,
         })
     }
 
@@ -321,6 +340,7 @@ impl LevelData {
         data_map.insert("SpawnX".to_string(), NbtTag::Int(self.spawn_x));
         data_map.insert("SpawnY".to_string(), NbtTag::Int(self.spawn_y));
         data_map.insert("SpawnZ".to_string(), NbtTag::Int(self.spawn_z));
+        data_map.insert("RandomSeed".to_string(), NbtTag::Long(self.seed));
 
         // Player compound
         let mut player_map = HashMap::new();
@@ -525,6 +545,7 @@ mod tests {
                 },
             ],
         };
+        original.seed = 123456789;
 
         // Serialize to gzip bytes
         let gz_bytes = original.to_gzip_bytes().expect("Gzip compression failed");

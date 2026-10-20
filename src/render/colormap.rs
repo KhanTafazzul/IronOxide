@@ -40,6 +40,7 @@ pub enum Biome {
     Swamp,
     Badlands,
     Ocean,
+    PaleGarden,
 }
 
 impl Biome {
@@ -56,6 +57,7 @@ impl Biome {
             Biome::Jungle => 0.95,
             Biome::Swamp => 0.8,
             Biome::Ocean => 0.5,
+            Biome::PaleGarden => 0.7,
         }
     }
 
@@ -69,6 +71,7 @@ impl Biome {
             Biome::Desert | Biome::Savanna | Biome::Badlands => 0.0,
             Biome::Jungle | Biome::Swamp => 0.9,
             Biome::Ocean => 0.5,
+            Biome::PaleGarden => 0.8,
         }
     }
 
@@ -78,20 +81,30 @@ impl Biome {
         (self.temperature(), self.downfall())
     }
 
-    /// Vanilla special fixed grass tint override (e.g. Swamp, Badlands)
+    /// Vanilla special fixed grass tint override (e.g. Swamp, Badlands, Pale Garden)
     pub fn special_grass_color(&self) -> Option<[f32; 3]> {
         match self {
             Biome::Swamp => Some([0x6A as f32 / 255.0, 0x70 as f32 / 255.0, 0x39 as f32 / 255.0]), // #6A7039
             Biome::Badlands => Some([0x90 as f32 / 255.0, 0x81 as f32 / 255.0, 0x4D as f32 / 255.0]), // #90814D
+            Biome::PaleGarden => Some([0x84 as f32 / 255.0, 0x87 as f32 / 255.0, 0x7D as f32 / 255.0]), // #84877D
             _ => None,
         }
     }
 
-    /// Vanilla special fixed foliage tint override (e.g. Swamp, Badlands)
+    /// Vanilla special fixed foliage tint override (e.g. Swamp, Badlands, Pale Garden)
     pub fn special_foliage_color(&self) -> Option<[f32; 3]> {
         match self {
             Biome::Swamp => Some([0x6A as f32 / 255.0, 0x70 as f32 / 255.0, 0x39 as f32 / 255.0]), // #6A7039
             Biome::Badlands => Some([0x9E as f32 / 255.0, 0x81 as f32 / 255.0, 0x4D as f32 / 255.0]), // #9E814D
+            Biome::PaleGarden => Some([0x87 as f32 / 255.0, 0x85 as f32 / 255.0, 0x7E as f32 / 255.0]), // #87857E
+            _ => None,
+        }
+    }
+
+    /// Vanilla special fixed ambient fog tint override (e.g. Pale Garden #9E9EA0)
+    pub fn special_fog_color(&self) -> Option<[f32; 3]> {
+        match self {
+            Biome::PaleGarden => Some([0x9E as f32 / 255.0, 0x9E as f32 / 255.0, 0xA0 as f32 / 255.0]), // #9E9EA0
             _ => None,
         }
     }

@@ -52,6 +52,16 @@ pub enum BlockId {
     DarkOakPlanks,
     DarkOakLeaves,
 
+    // --- Overworld: 1.21.4 Pale Garden Set ---
+    PaleOakLog,
+    PaleOakWood,
+    PaleOakPlanks,
+    PaleOakLeaves,
+    PaleMossBlock,
+    PaleMossCarpet,
+    PaleHangingMoss,
+    CreakingHeart,
+
     // --- Overworld: Ores ---
     CoalOre,
     IronOre,
@@ -451,6 +461,85 @@ impl BlockId {
                     shape_kind: VoxelShapeKind::FullCube,
                 }
             }
+
+            // --- 1.21.4 Pale Garden Set ---
+            BlockId::PaleOakLog | BlockId::PaleOakWood => BlockProperties {
+                is_solid: true,
+                is_transparent: false,
+                light_emission: 0,
+                hardness: 2.0,
+                blast_resistance: 2.0,
+                sound_family: SoundFamily::Wood,
+                tool_required: ToolType::Axe,
+                min_harvest_tier: HarvestTier::Hand,
+                shape_kind: VoxelShapeKind::FullCube,
+            },
+            BlockId::PaleOakPlanks => BlockProperties {
+                is_solid: true,
+                is_transparent: false,
+                light_emission: 0,
+                hardness: 2.0,
+                blast_resistance: 3.0,
+                sound_family: SoundFamily::Wood,
+                tool_required: ToolType::Axe,
+                min_harvest_tier: HarvestTier::Hand,
+                shape_kind: VoxelShapeKind::FullCube,
+            },
+            BlockId::PaleOakLeaves => BlockProperties {
+                is_solid: true,
+                is_transparent: true,
+                light_emission: 0,
+                hardness: 0.2,
+                blast_resistance: 0.2,
+                sound_family: SoundFamily::Grass,
+                tool_required: ToolType::Hoe,
+                min_harvest_tier: HarvestTier::Hand,
+                shape_kind: VoxelShapeKind::FullCube,
+            },
+            BlockId::PaleMossBlock => BlockProperties {
+                is_solid: true,
+                is_transparent: false,
+                light_emission: 0,
+                hardness: 0.1,
+                blast_resistance: 0.1,
+                sound_family: SoundFamily::Grass,
+                tool_required: ToolType::Hoe,
+                min_harvest_tier: HarvestTier::Hand,
+                shape_kind: VoxelShapeKind::FullCube,
+            },
+            BlockId::PaleMossCarpet => BlockProperties {
+                is_solid: false,
+                is_transparent: true,
+                light_emission: 0,
+                hardness: 0.1,
+                blast_resistance: 0.1,
+                sound_family: SoundFamily::Grass,
+                tool_required: ToolType::None,
+                min_harvest_tier: HarvestTier::Hand,
+                shape_kind: VoxelShapeKind::BottomSlab,
+            },
+            BlockId::PaleHangingMoss => BlockProperties {
+                is_solid: false,
+                is_transparent: true,
+                light_emission: 0,
+                hardness: 0.0,
+                blast_resistance: 0.0,
+                sound_family: SoundFamily::Grass,
+                tool_required: ToolType::None,
+                min_harvest_tier: HarvestTier::Hand,
+                shape_kind: VoxelShapeKind::Empty,
+            },
+            BlockId::CreakingHeart => BlockProperties {
+                is_solid: true,
+                is_transparent: false,
+                light_emission: 0,
+                hardness: 5.0,
+                blast_resistance: 5.0,
+                sound_family: SoundFamily::Wood,
+                tool_required: ToolType::Axe,
+                min_harvest_tier: HarvestTier::Hand,
+                shape_kind: VoxelShapeKind::FullCube,
+            },
 
             // --- Overworld: Ores ---
             BlockId::CoalOre => BlockProperties {
@@ -857,6 +946,9 @@ impl BlockId {
             | BlockId::BirchLeaves
             | BlockId::SpruceLeaves
             | BlockId::DarkOakLeaves
+            | BlockId::PaleOakLeaves
+            | BlockId::PaleMossCarpet
+            | BlockId::PaleHangingMoss
             | BlockId::OakSlab
             | BlockId::StoneSlab
             | BlockId::CobblestoneSlab
@@ -1024,6 +1116,14 @@ impl BlockId {
             BlockId::DarkOakLog => "minecraft:dark_oak_log",
             BlockId::DarkOakPlanks => "minecraft:dark_oak_planks",
             BlockId::DarkOakLeaves => "minecraft:dark_oak_leaves",
+            BlockId::PaleOakLog => "minecraft:pale_oak_log",
+            BlockId::PaleOakWood => "minecraft:pale_oak_wood",
+            BlockId::PaleOakPlanks => "minecraft:pale_oak_planks",
+            BlockId::PaleOakLeaves => "minecraft:pale_oak_leaves",
+            BlockId::PaleMossBlock => "minecraft:pale_moss_block",
+            BlockId::PaleMossCarpet => "minecraft:pale_moss_carpet",
+            BlockId::PaleHangingMoss => "minecraft:pale_hanging_moss",
+            BlockId::CreakingHeart => "minecraft:creaking_heart",
 
             BlockId::CoalOre => "minecraft:coal_ore",
             BlockId::IronOre => "minecraft:iron_ore",
@@ -1112,6 +1212,14 @@ impl BlockId {
             "dark_oak_log" => Some(BlockId::DarkOakLog),
             "dark_oak_planks" => Some(BlockId::DarkOakPlanks),
             "dark_oak_leaves" => Some(BlockId::DarkOakLeaves),
+            "pale_oak_log" => Some(BlockId::PaleOakLog),
+            "pale_oak_wood" => Some(BlockId::PaleOakWood),
+            "pale_oak_planks" => Some(BlockId::PaleOakPlanks),
+            "pale_oak_leaves" => Some(BlockId::PaleOakLeaves),
+            "pale_moss_block" => Some(BlockId::PaleMossBlock),
+            "pale_moss_carpet" => Some(BlockId::PaleMossCarpet),
+            "pale_hanging_moss" => Some(BlockId::PaleHangingMoss),
+            "creaking_heart" => Some(BlockId::CreakingHeart),
 
             "coal_ore" => Some(BlockId::CoalOre),
             "iron_ore" => Some(BlockId::IronOre),

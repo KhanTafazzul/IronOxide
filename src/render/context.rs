@@ -201,6 +201,7 @@ impl<'w> RenderContext<'w> {
         entities: &[crate::game::entities::ItemEntity],
         mobs: &[crate::game::mobs::MobEntity],
         debug_overlay: Option<(&crate::render::gui::DebugOverlay, &crate::render::gui::DebugMetrics)>,
+        gpu_meshes: &[&crate::game::chunk_manager::GpuChunkMesh],
         meshes: &[&crate::render::mesher::ChunkMesh],
         dynamic_light: crate::render::dynamic_lights::DynamicLightUniform,
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -254,14 +255,25 @@ impl<'w> RenderContext<'w> {
 
         // 3D Terrain pass with dynamic lighting
         self.terrain_renderer.update_uniform(&self.queue, dynamic_light);
-        self.terrain_renderer.render(
-            &mut encoder,
-            &self.queue,
-            &view,
-            &self.camera_bind_group,
-            &self.atlas_bind_group,
-            meshes.iter().copied(),
-        );
+        if !gpu_meshes.is_empty() {
+            self.terrain_renderer.render_gpu_meshes(
+                &mut encoder,
+                &view,
+                &self.camera_bind_group,
+                &self.atlas_bind_group,
+                gpu_meshes.iter().copied(),
+            );
+        }
+        if !meshes.is_empty() {
+            self.terrain_renderer.render(
+                &mut encoder,
+                &self.queue,
+                &view,
+                &self.camera_bind_group,
+                &self.atlas_bind_group,
+                meshes.iter().copied(),
+            );
+        }
 
         // 3D Effects pass: Destroy crack overlay & Particle billboards
         self.effects_renderer.render(

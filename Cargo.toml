@@ -12,6 +12,7 @@ members = [
     "crates/mc_crafting",
     "crates/mc_gameplay",
     "crates/mc_worldgen",
+    "crates/mc_entities",
 ]
 
 [dependencies]
@@ -29,4 +30,12 @@ mc_worldgen = { path = "crates/mc_worldgen" }
 mc_items = { path = "crates/mc_items" }
 mc_crafting = { path = "crates/mc_crafting" }
 mc_gameplay = { path = "crates/mc_gameplay" }
+mc_entities = { path = "crates/mc_entities" }
+
+[dev-dependencies]
+criterion = { version = "0.5", default-features = false }
+
+[[bench]]
+name = "worldgen_rendering_stress"
+harness = false
 

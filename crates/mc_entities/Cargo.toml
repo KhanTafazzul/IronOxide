@@ -1,0 +1,15 @@
+[package]
+name = "mc_entities"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Vanilla Minecraft mob ECS architecture, AABB physics integration, and behavior GoalSelector AI engine"
+
+[dependencies]
+glam = "0.34.1"
+mc_items = { path = "../mc_items" }
+serde = { version = "1.0", features = ["derive"], optional = true }
+
+[features]
+default = []
+serde = ["dep:serde"]

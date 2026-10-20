@@ -7,6 +7,7 @@ pub mod world;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
+use wgpu::util::DeviceExt;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::{DeviceEvent, DeviceId, ElementState, KeyEvent, MouseButton, WindowEvent};
@@ -15,6 +16,7 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
 
 use audio::{AudioSystem, FootstepTracker, SoundEvent, SoundType};
+use game::chunk_manager::{ChunkManager, GpuChunkMesh, DEFAULT_CHUNK_RADIUS};
 use game::inventory::{ItemStack, PlayerInventory};
 use game::stats::PlayerStats;
 use game::{
@@ -65,12 +67,15 @@ struct GameApp<'a> {
     key_shift: bool,
     debug_overlay: DebugOverlay,
     last_frame: Instant,
+    chunk_manager: ChunkManager,
+    flying: bool,
+    fly_speed: f32,
 }
 
 impl<'a> GameApp<'a> {
     fn new() -> Self {
         let atlas = Arc::new(TextureAtlas::load_or_create(None));
-        let mut storage = WorldStorageManager::new("WorldName");
+        let mut storage = WorldStorageManager::new("World");
         let mut world = World::new();
 
         // Check if spawn chunk column (0, 0) exists in persistent .mca region storage
@@ -127,8 +132,8 @@ impl<'a> GameApp<'a> {
                 data
             }
             Ok(None) => {
-                println!("[LevelData] No level.dat found; initializing new world metadata for 'WorldName'");
-                let data = LevelData::new("WorldName");
+                println!("[LevelData] No level.dat found; initializing new world metadata for 'World'");
+                let data = LevelData::new("World");
                 if let Err(e) = storage.save_level_data(&data) {
                     eprintln!("[LevelData] Failed to write initial level.dat: {e}");
                 }
@@ -136,9 +141,14 @@ impl<'a> GameApp<'a> {
             }
             Err(e) => {
                 eprintln!("[LevelData] Warning: failed to parse level.dat: {e}; using defaults");
-                LevelData::new("WorldName")
+                LevelData::new("World")
             }
         };
+
+        let mut chunk_manager = ChunkManager::new(level_data.seed, DEFAULT_CHUNK_RADIUS);
+        if loaded || !world.sections.is_empty() {
+            chunk_manager.chunk_states.insert((0, 0), game::chunk_manager::ChunkStatus::Loaded);
+        }
 
         let player_pos = glam::Vec3::new(
             level_data.player.pos[0] as f32,
@@ -229,6 +239,9 @@ impl<'a> GameApp<'a> {
             key_shift: false,
             debug_overlay: DebugOverlay::new(),
             last_frame: Instant::now(),
+            chunk_manager,
+            flying: false,
+            fly_speed: 1.8,
         }
     }
 
@@ -263,6 +276,26 @@ impl<'a> GameApp<'a> {
 
     fn update_physics(&mut self, _dt: f32) {
         if self.inventory_gui.is_open {
+            return;
+        }
+
+        // High-speed flight mode for rapid exploration and world generation streaming
+        if self.flying {
+            let mut move_dir = glam::Vec3::ZERO;
+            let fwd = self.camera.forwards();
+            let right = self.camera.right();
+            let speed = if self.key_shift { self.fly_speed * 2.5 } else { self.fly_speed };
+            if self.key_w { move_dir += fwd; }
+            if self.key_s { move_dir -= fwd; }
+            if self.key_d { move_dir += right; }
+            if self.key_a { move_dir -= right; }
+            if self.key_space { move_dir.y += 1.0; }
+            if self.key_shift && !self.key_w && !self.key_s { move_dir.y -= 1.0; }
+            if move_dir.length_squared() > 0.0001 {
+                self.player.position += move_dir.normalize() * speed;
+            }
+            self.player.velocity = glam::Vec3::ZERO;
+            self.camera.setup(self.player.position, Some(&self.world));
             return;
         }
 
@@ -401,6 +434,33 @@ impl<'a> GameApp<'a> {
         for &sec_pos in sections {
             if let Some(section) = self.world.sections.get(&sec_pos) {
                 let mesh = greedy_mesh_section(section, &self.atlas, &self.world);
+                if let Some(ctx) = &self.render_ctx {
+                    if !mesh.is_empty() {
+                        let vertex_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("Section Dynamic Vertex Buffer"),
+                            contents: bytemuck::cast_slice(&mesh.vertices),
+                            usage: wgpu::BufferUsages::VERTEX,
+                        });
+                        let index_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("Section Dynamic Index Buffer"),
+                            contents: bytemuck::cast_slice(&mesh.indices),
+                            usage: wgpu::BufferUsages::INDEX,
+                        });
+                        let quad_count = mesh.quad_count();
+                        let index_count = mesh.indices.len() as u32;
+                        self.chunk_manager.gpu_meshes.insert(
+                            sec_pos,
+                            GpuChunkMesh {
+                                vertex_buffer,
+                                index_buffer,
+                                index_count,
+                                quad_count,
+                            },
+                        );
+                    } else {
+                        self.chunk_manager.gpu_meshes.remove(&sec_pos);
+                    }
+                }
                 self.meshes.insert(sec_pos, mesh);
             }
         }
@@ -569,6 +629,10 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                     KeyCode::F3 if pressed => {
                         self.debug_overlay.toggle();
                     }
+                    KeyCode::KeyF if pressed => {
+                        self.flying = !self.flying;
+                        println!("[Player] Flying mode toggled: {}", self.flying);
+                    }
                     KeyCode::F5 if pressed => {
                         let mode = self.camera.cycle_mode();
                         self.camera.setup(self.player.position, Some(&self.world));
@@ -630,6 +694,20 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                     self.remesh_sections(&fluid_affected);
                     self.storage.mark_sections_dirty(&fluid_affected);
                 }
+
+                // Asynchronous multi-threaded chunk streaming pipeline update:
+                // Queries player chunk (cx, cz), dispatches procedural worldgen/Anvil loading to Rayon,
+                // performs 4-neighbor completion barrier for meshing, uploads GPU vertex/index buffers,
+                // and evicts distant chunks beyond R + 2.
+                let dev = self.render_ctx.as_ref().map(|c| &c.device);
+                self.chunk_manager.update(
+                    self.player.position,
+                    &mut self.world,
+                    &mut self.storage,
+                    &self.atlas,
+                    dev,
+                    &mut self.meshes,
+                );
 
                 // REA Verified: Mining progress tracking & block break resolution
                 let raycast_hit = if self.inventory_gui.is_open || !self.mouse_captured {
@@ -760,8 +838,13 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                     let vp = self.camera.view_proj_matrix(aspect);
                     let frustum = render::culling::Frustum::from_view_proj(vp);
 
-                    let active_meshes: Vec<&ChunkMesh> = self.meshes.iter()
+                    let active_gpu_meshes: Vec<&GpuChunkMesh> = self.chunk_manager.gpu_meshes.iter()
                         .filter(|(sec_pos, _)| frustum.intersects_chunk_section(**sec_pos))
+                        .map(|(_, mesh)| mesh)
+                        .collect();
+
+                    let active_cpu_meshes: Vec<&ChunkMesh> = self.meshes.iter()
+                        .filter(|(sec_pos, _)| !self.chunk_manager.gpu_meshes.contains_key(*sec_pos) && frustum.intersects_chunk_section(**sec_pos))
                         .map(|(_, mesh)| mesh)
                         .collect();
 
@@ -778,8 +861,10 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                         let (rss, total) = DebugOverlay::query_memory_stats();
                         let gpu_name = ctx.adapter_info.name.clone();
                         let gpu_backend = format!("{:?}", ctx.adapter_info.backend);
-                        let rendered_quads: usize = active_meshes.iter().map(|m| m.quad_count()).sum();
-                        let draw_calls = active_meshes.iter().filter(|m| !m.is_empty()).count() + 4;
+                        let rendered_quads: usize = active_gpu_meshes.iter().map(|m| m.quad_count).sum::<usize>()
+                            + active_cpu_meshes.iter().map(|m| m.quad_count()).sum::<usize>();
+                        let draw_calls = active_gpu_meshes.iter().filter(|m| m.index_count > 0).count()
+                            + active_cpu_meshes.iter().filter(|m| !m.is_empty()).count() + 4;
 
                         Some(DebugMetrics {
                             engine_version: "IronOxide 0.1.0".to_string(),
@@ -831,7 +916,8 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                         self.item_entities.active_items(),
                         self.mobs.mobs(),
                         debug_metrics.as_ref().map(|m| (&self.debug_overlay, m)),
-                        &active_meshes,
+                        &active_gpu_meshes,
+                        &active_cpu_meshes,
                         dynamic_light,
                     ) {
                         eprintln!("Render error: {e:?}");

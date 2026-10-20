@@ -74,6 +74,16 @@ pub enum SurfaceBlock {
     JungleLeaves,
     AcaciaLeaves,
 
+    // Pale Garden & Pale Oak wood set (1.21.4)
+    PaleOakLog,
+    PaleOakWood,
+    PaleOakPlanks,
+    PaleOakLeaves,
+    PaleMossBlock,
+    PaleMossCarpet,
+    PaleHangingMoss,
+    CreakingHeart,
+
     // Ground Cover & Flowers
     Poppy,
     Dandelion,

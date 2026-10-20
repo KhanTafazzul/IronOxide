@@ -67,6 +67,9 @@ pub enum BiomeId {
     DripstoneCaves,
     LushCaves,
     DeepDark,
+
+    // --- 1.21.4 Pale Garden ---
+    PaleGarden,
 }
 
 /// Broad ecological category classification.
@@ -148,6 +151,9 @@ impl BiomeId {
             BiomeId::DripstoneCaves => "minecraft:dripstone_caves",
             BiomeId::LushCaves => "minecraft:lush_caves",
             BiomeId::DeepDark => "minecraft:deep_dark",
+
+            // 1.21.4
+            BiomeId::PaleGarden => "minecraft:pale_garden",
         }
     }
 
@@ -218,6 +224,9 @@ impl BiomeId {
             "lush_caves" => Some(BiomeId::LushCaves),
             "deep_dark" => Some(BiomeId::DeepDark),
 
+            // 1.21.4
+            "pale_garden" => Some(BiomeId::PaleGarden),
+
             _ => None,
         }
     }
@@ -253,7 +262,8 @@ impl BiomeId {
             | BiomeId::River
             | BiomeId::Beach
             | BiomeId::Meadow
-            | BiomeId::CherryGrove => BiomeCategory::Temperate,
+            | BiomeId::CherryGrove
+            | BiomeId::PaleGarden => BiomeCategory::Temperate,
 
             BiomeId::Swamp
             | BiomeId::MangroveSwamp
@@ -300,7 +310,7 @@ impl BiomeId {
             BiomeId::ColdOcean | BiomeId::DeepColdOcean => 0.5,
             BiomeId::FrozenOcean | BiomeId::DeepFrozenOcean => 0.0,
             BiomeId::Plains | BiomeId::SunflowerPlains | BiomeId::DarkForest => 0.8,
-            BiomeId::Forest | BiomeId::FlowerForest => 0.7,
+            BiomeId::Forest | BiomeId::FlowerForest | BiomeId::PaleGarden => 0.7,
             BiomeId::BirchForest | BiomeId::OldGrowthBirchForest => 0.6,
             BiomeId::Meadow => 0.5,
             BiomeId::CherryGrove => 0.5,

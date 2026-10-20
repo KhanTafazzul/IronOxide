@@ -1,3 +1,4 @@
+pub mod chunk_manager;
 pub mod entities;
 pub mod inventory;
 pub mod mining;
@@ -7,6 +8,8 @@ pub mod portals;
 pub mod raycast;
 pub mod stats;
 pub mod world;
+
+pub use chunk_manager::{ChunkManager, ChunkStatus, GpuChunkMesh};
 
 pub use entities::{ItemEntity, ItemEntityManager};
 pub use mobs::{MobEcs, MobEntity, MobEvent, MobType, MobAiState};

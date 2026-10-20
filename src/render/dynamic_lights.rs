@@ -207,8 +207,8 @@ pub struct DynamicLightPipeline {
 }
 
 impl DynamicLightPipeline {
-    pub const MAX_VERTICES: usize = 131072; // 128K vertices
-    pub const MAX_INDICES: usize = 196608;  // 192K indices (32K quads)
+    pub const MAX_VERTICES: usize = 524288; // 512K vertices
+    pub const MAX_INDICES: usize = 786432;  // 768K indices (128K quads)
 
     pub fn new(
         device: &wgpu::Device,
@@ -401,6 +401,47 @@ impl DynamicLightPipeline {
         rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         rpass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         rpass.draw_indexed(0..clamped_idx_len as u32, 0, 0..1);
+    }
+
+    /// Renders pre-uploaded chunk GPU meshes with dynamic lighting.
+    /// Incurs zero CPU vertex copying and zero buffer re-uploads during frame render.
+    pub fn render_gpu_meshes<'a>(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        target_view: &wgpu::TextureView,
+        camera_bind_group: &wgpu::BindGroup,
+        atlas_bind_group: &wgpu::BindGroup,
+        gpu_meshes: impl IntoIterator<Item = &'a crate::game::chunk_manager::GpuChunkMesh>,
+    ) {
+        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Terrain Render Pass (Pre-Uploaded GPU Meshes)"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target_view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+
+        rpass.set_pipeline(&self.pipeline);
+        rpass.set_bind_group(0, camera_bind_group, &[]);
+        rpass.set_bind_group(1, atlas_bind_group, &[]);
+        rpass.set_bind_group(2, &self.dynamic_light_bind_group, &[]);
+
+        for mesh in gpu_meshes {
+            if mesh.index_count > 0 {
+                rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                rpass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                rpass.draw_indexed(0..mesh.index_count, 0, 0..1);
+            }
+        }
     }
 }
 

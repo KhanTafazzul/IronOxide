@@ -229,9 +229,10 @@ pub fn run_static_batch_generation(
 
     (0..matrix_size).into_par_iter().for_each(|cx| {
         for cz in 0..matrix_size {
-            // Connect your World/Chunk struct here:
+            // Procedural generation & meshing pass
             let chunk = generator.generate_chunk(cx, cz);
-            black_box(&chunk);
+            let mesh = EngineChunkMesh::mesh_chunk(&chunk);
+            black_box((&chunk, &mesh));
             chunks_processed.fetch_add(1, Ordering::Relaxed);
         }
     });

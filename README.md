@@ -6,7 +6,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Language: Rust 2024](https://img.shields.io/badge/Language-Rust_2024-orange.svg)](https://www.rust-lang.org/)
 [![Graphics: WGPU](https://img.shields.io/badge/Graphics-WGPU_/_WGSL-green.svg)](https://wgpu.rs/)
-[![Tests: 303 Passing](https://img.shields.io/badge/Tests-303_Passed-brightgreen.svg)]()
+[![Tests: 316 Passing](https://img.shields.io/badge/Tests-316_Passed-brightgreen.svg)]()
 [![Parity: Minecraft 1.20.4](https://img.shields.io/badge/Parity-Minecraft_1.20.4-red.svg)](https://minecraft.net/)
 
 ---
@@ -176,12 +176,12 @@ Every subsystem is backed by unit tests verifying mathematical parity with the o
 ```text
 ✓ 179 passed in iron_oxide     (Physics, Lighting, Fluids, Portals, Rendering, GUI)
 ✓  94 passed in mc_worldgen    (Noise router, Biome climate, Carvers, Jigsaw pools, Pale Garden)
-✓  17 passed in mc_entities    (Mob ECS, AABB physics, GoalSelector AI, 3D Voxel Node Navigation)
+✓  30 passed in mc_entities    (Mob ECS, AABB physics, GoalSelector AI, Passive land animals & pets)
 ✓   5 passed in mc_items       (Tool tiers, Armor attributes, ItemId mappings)
 ✓   3 passed in mc_crafting    (Shaped & shapeless recipe resolution from client.jar)
 ✓   5 passed in mc_gameplay    (Furnace ticking, Anvil penalty, Crafting matrices)
 ──────────────────────────────────────────────────────────────────────────
-Total: 303 / 303 Tests Passing (100% Green)
+Total: 316 / 316 Tests Passing (100% Green)
 ```
 
 For full task-by-task engineering breakdowns and REA decompiled references, check out [DEVELOPMENT_MILESTONES.md](DEVELOPMENT_MILESTONES.md).

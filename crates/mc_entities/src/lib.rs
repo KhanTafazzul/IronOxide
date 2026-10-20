@@ -3,6 +3,8 @@
 
 pub mod ai;
 pub mod components;
+pub mod passive;
 
 pub use ai::*;
 pub use components::*;
+pub use passive::*;

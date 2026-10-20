@@ -3,8 +3,8 @@
 
 > **Project Goal**: Re-implement Minecraft 1.20.4 client and voxel engine from scratch in **Rust** using **WGPU** and **WGSL** shaders by reverse-engineering `client.jar` using decompilation and exact vanilla algorithms.
 >
-> **Status**: **282 / 282 Unit & Integration Tests Passing (179 in IronOxide, 90 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay)**
-> **Last Updated**: Task 49: Pale Garden Biome, Pale Oak & Creaking Heart Mechanics Fully Completed & Verified.
+> **Status**: **327 / 327 Unit & Integration Tests Passing (179 in IronOxide, 90 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay, 45 in mc_entities)**
+> **Last Updated**: Task 52: Aquatic, Amphibious & Nether Fluid Mobs Completed & Verified.
 
 ---
 
@@ -12,6 +12,9 @@
 
 | Task / Feature | Module / Location | Status | Key Highlights |
 |---|---|---|---|
+| **Task 52: Aquatic, Amphibious & Fluid Mobs** | `crates/mc_entities/src/aquatic/` | Done | WaterPathNavigation 3D swim with drag & breath drowning/suffocation meters, Cod/Salmon Boids flocking & upstream leaps, Pufferfish 3 puff stages & contact poison, TropicalFish procedural presets, Squid/GlowSquid periodic jet propulsion & ink defense, Turtle home beach egg laying & scute shedding, Frog 3 climate variants & froglight drops, Tadpole metamorphosis, Axolotl 5 variants with playing dead regeneration, Strider lava ocean walking & cold shivering penalty |
+| **Task 51: Passive Land Mammals & Birds** | `crates/mc_entities/src/passive/` | Done | 100% complete passive animals: Farm (Cow, Pig, Sheep with 16 dye colors & wool regrowth, Chicken with egg timer), Pets & Tameables (Wolf, Cat with creeper repel, Ocelot, Parrot with shoulder perch & cookie poison), Wild & Utility (Fox night hunting & mouth items, Armadillo shell rolling, Camel 2-player ride & dash, Sniffer ancient seed digging, Allay item fetching & duplication, Horse/Donkey/Mule, Panda 7 genetics alleles, PolarBear, Rabbit, Bat) |
+| **Task 50: Mob ECS & GoalSelector AI Engine** | `crates/mc_entities/src/ai/`, `crates/mc_entities/src/components.rs` | Done | Vanilla GoalSelector priority preemption, bitmask GoalFlags conflict resolution, 3D path navigation (1-block step up, safe drop downs, door handling, fire/lava avoidance), Melee/Ranged/Panic/Tempt/Breed/Float AI goals |
 | **Task 49: Pale Garden Biome & Creaking Heart** | `crates/mc_worldgen/src/biomes/pale_garden.rs`, `crates/mc_worldgen/src/features/pale_garden.rs`, `src/world/block_registry.rs` | Done | 1.21.4 Pale Garden 6D climate point, desaturated grayscale atmospheric colors, Pale Oak wood set, 2x2 sprawling canopies & hanging pale moss, Creaking Heart day/night dormancy state machine & damage redirection |
 | **Task 48: Jigsaw Template Pool Deserializer** | `crates/mc_worldgen/src/structures/template_pool.rs`, `src/world/structures/jigsaw.rs` | Done | Dynamic Serde loader for 182 Mojang template pool JSONs in `client.jar`, exact array-order weighted discrete distribution & alias table, Plains/Savanna/Desert Village, Woodland Mansion & Trial Chambers expansions |
 | **Task 47: Vanilla 11-Step Decoration Pipeline** | `crates/mc_worldgen/src/features/pipeline.rs` | Done | 11 sequential decoration steps (0..10), dynamic JSON extraction from `client.jar`, placement modifiers (InSquare, Count, HeightRange, BiomeFilter), feature seed isolation |
@@ -1118,7 +1121,22 @@ When resuming next, execution will start directly from **Task 33**:
 +          * `PolarBear` (`byq.class`): Neutral adult, rearing up hostile attack if cub is nearby.
 +          * `Rabbit` (`bys.class`): Carrot eating, fur variants, drops.
 +          * `Bat` (`bxt.class`): Hanging inverted in darkness, takes flight when disturbed.
-+        - Validated with 13 comprehensive tests in `crates/mc_entities/tests/passive_test.rs` (316 total passing tests across workspace).
++        - Validated with 13 comprehensive tests in `crates/mc_entities/tests/passive_test.rs`.
++
++    15. **Task 52: Aquatic, Amphibious & Fluid Mobs (`crates/mc_entities/src/aquatic/`)**:
++        - Reverse-engineered water swim navigation, breath drowning meters, fish schooling, cephalopods, amphibians, and nether fluid striders:
++          * `WaterPathNavigation` (`bvx.class`) & `BreathMeter` (`bmm.class`): 3D free swimming with buoyancy curves and water drag (0.8 drag factor). Dual-mode breath meters: air-breathers drown when submerged (air <= -20 deals 2 HP damage every second), water-breathers suffocate on land (air <= -20 deals 1 HP damage every second), rapid air replenishment on surface.
++          * `Cod` (`bye.class`) & `Salmon` (`byt.class`): Boids flocking alignment & cohesion (`FishSchool` with leader/follower hierarchy up to 9 fish). Salmon upstream leaping capabilities (`can_leap_waterfalls`). Water bucket pickup yielding `CodBucket` and `SalmonBucket`.
++          * `Pufferfish` (`byr.class`): 3 puff expansion stages (`Small` at >= 2.5m, `Mid` at < 2.5m, `Full` at < 1.5m) with expanding AABB hitboxes (0.35m -> 0.5m -> 0.7m). Stinging defensive contact delivering Poison I (4s) in Mid stage and Poison II (7s) in Full stage. Bucketable into `PufferfishBucket`.
++          * `TropicalFish` (`byy.class`): Procedural patterns (`Flopper`, `Kob`, `Sunstreak`, etc.) and 16 dye colors, including canonical Clownfish and Blue Tang presets. Bucketable into `TropicalFishBucket`.
++          * `Squid` (`byx.class`) & `GlowSquid` (`bmd.class`): Periodic tentacle jet propulsion cycle (40 ticks = 2.0s) delivering forward impulse velocity. Ink cloud emission on damage with evasion speed burst: regular Squid shoots `InkSac`; GlowSquid shoots `GlowInkSac` and enters dark state (`dark_ticks_remaining: 100`) extinguishing bioluminescence.
++          * `Turtle` (`byz.class`): Home beach spawn coordinate memory, crawling on land (0.25x speed) vs swimming in water (1.0x speed), breeding with `Seagrass`, gravid egg state traveling back home, 200-tick sand digging depositing 3 `TurtleEgg` items, scute shedding when baby matures to adult (`ItemId::Scute`).
++          * `Frog` (`bzn.class`): 3 climate temperature variants (`FrogVariant::Temperate` / Pearlescent, `FrogVariant::Warm` / Ochre, `FrogVariant::Cold` / Verdant). Eating small slimes dropping `SlimeBall`; eating small magma cubes dropping the corresponding `PearlescentFroglight`, `OchreFroglight`, or `VerdantFroglight`.
++          * `Tadpole` (`bzq.class`): Water-breathing baby stage, bucketable into `TadpoleBucket`, slime ball growth acceleration, temperature-based metamorphosis into appropriate Frog variant.
++          * `Axolotl` (`bzf.class`): 5 variants (`Lucy`, `Wild`, `Gold`, `Cyan`, `Blue` 1/1200). Bucketable into `AxolotlBucket`. Self-preservation "playing dead" state machine (200 ticks = 10s) triggered when taking damage underwater while health < 50%; floats motionless, gains untargetable status from hostile mobs, and heals via Regeneration I. Actively hunts fish, squid, and drowned.
++          * `Strider` (`cdc.class`): Nether fluid mob walking across lava oceans without sinking. Shivering state (`is_cold = true`, purple-gray color) outside lava with ~65% speed penalty (0.3 -> 0.105). Equippable with `ItemId::Saddle`, steerable by rider, and boosted with `ItemId::WarpedFungusOnAStick` (1.5x speed). Water/rain environmental damage (1 HP per second). Drops String and equipped Saddle on death.
++        - Validated with 11 comprehensive tests in `crates/mc_entities/tests/aquatic_test.rs` (327 total passing tests across workspace).
+
 +
  ---
  

@@ -2,9 +2,12 @@
 //! and goal-selector AI engine that powers all 60+ vanilla Minecraft mobs.
 
 pub mod ai;
+pub mod aquatic;
 pub mod components;
 pub mod passive;
 
 pub use ai::*;
+pub use aquatic::*;
 pub use components::*;
 pub use passive::*;
+

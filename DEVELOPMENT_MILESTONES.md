@@ -3,8 +3,8 @@
 
 > **Project Goal**: Re-implement Minecraft 1.20.4 client and voxel engine from scratch in **Rust** using **WGPU** and **WGSL** shaders by reverse-engineering `client.jar` using decompilation and exact vanilla algorithms.
 >
-> **Status**: **337 / 337 Unit & Integration Tests Passing (179 in IronOxide, 90 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay, 55 in mc_entities)**
-> **Last Updated**: Task 53: Villager Profession Schedule, Trading & Golems Completed & Verified.
+> **Status**: **347 / 347 Unit & Integration Tests Passing (179 in IronOxide, 90 in mc_worldgen, 5 in mc_items, 3 in mc_crafting, 5 in mc_gameplay, 65 in mc_entities)**
+> **Last Updated**: Task 54: Hostile Mob Registry, Attack Logic & Projectiles Completed & Verified.
 
 ---
 
@@ -12,6 +12,7 @@
 
 | Task / Feature | Module / Location | Status | Key Highlights |
 |---|---|---|---|
+| **Task 54: Hostile Mob Registry, Attack Logic & Projectiles** | `crates/mc_entities/src/hostile/` | Done | Overworld Undead (Zombie drowning conversion & curing, Skeleton strafing bow with tipped arrows, Spider vertical wall climbing & pounce leap, Creeper 30-tick fuse & charged explosion, Phantom insomnia swooping, Witch defensive potions & splash throwing), Illagers (Pillager crossbow reload, Vindicator axe strike, Evoker 16-fang line attack & Totem of Undying, Ravager shield stun & concussive roar), Nether (Ghast 3D fireball, Blaze triple burst, MagmaCube size splits, Piglin gold bartering & Overworld zombification), Specialized (Guardian laser beam locking & thorns, Warden vibration hearing & sonic boom beam, Breeze projectile reflection & wind charges, Creaking eye-contact freezing) |
 | **Task 53: Villager Profession Schedule, Trading & Golems** | `crates/mc_entities/src/villagers/` | Done | Daily POI schedule (Work 2000-9000, Gather 9000-11000, Sleep 12000-0), Nitwit schedule, 15 professions, Novice-to-Master leveling, 2x daily restocks, permanent XP locking, Iron Golem flinging & 4-stage cracking, Snow Golem snow trail & snowball defense, Wandering Trader 10-12 day spawner & invisibility |
 | **Task 52: Aquatic, Amphibious & Fluid Mobs** | `crates/mc_entities/src/aquatic/` | Done | WaterPathNavigation 3D swim with drag & breath drowning/suffocation meters, Cod/Salmon Boids flocking & upstream leaps, Pufferfish 3 puff stages & contact poison, TropicalFish procedural presets, Squid/GlowSquid periodic jet propulsion & ink defense, Turtle home beach egg laying & scute shedding, Frog 3 climate variants & froglight drops, Tadpole metamorphosis, Axolotl 5 variants with playing dead regeneration, Strider lava ocean walking & cold shivering penalty |
 | **Task 51: Passive Land Mammals & Birds** | `crates/mc_entities/src/passive/` | Done | 100% complete passive animals: Farm (Cow, Pig, Sheep with 16 dye colors & wool regrowth, Chicken with egg timer), Pets & Tameables (Wolf, Cat with creeper repel, Ocelot, Parrot with shoulder perch & cookie poison), Wild & Utility (Fox night hunting & mouth items, Armadillo shell rolling, Camel 2-player ride & dash, Sniffer ancient seed digging, Allay item fetching & duplication, Horse/Donkey/Mule, Panda 7 genetics alleles, PolarBear, Rabbit, Bat) |
@@ -1147,7 +1148,17 @@ When resuming next, execution will start directly from **Task 33**:
 +          * `IronGolem` (`byk.class`): 100 HP, 1.0 Knockback Resistance. Village summon checks: $\ge 3$ panicked villagers within 10s or $\ge 5$ gossiping villagers with 3 claimed beds. Upward fling attack dealing 14 damage and 0.45 vertical toss. 4-stage visual cracking (`None` > 75%, `Low` 50-75%, `Medium` 25-50%, `High` < 25%). Repaired with `ItemId::IronIngot` (+25 HP per ingot). Target filters protecting villagers from hostile monsters.
 +          * `SnowGolem` (`byw.class`): 4 HP. Lays snow layer trails on ground. Melts in warm biomes (temperature > 0.8) and in rain/water (1.0 damage/s). Throws snowballs at hostiles within 16 blocks (20-tick cooldown, vertical arc). Shearing with `ItemId::Shears` removes carved pumpkin helmet, dropping `ItemId::CarvedPumpkin`.
 +          * `WanderingTrader` (`cfb.class`, `cfc.class`): 10-12 day spawner guaranteeing spawn after 12 in-game days with 2 Trader Llamas attached by `ItemId::Lead`. Drinks Potion of Invisibility at night (ticks $\ge 12000$) or under threat, and drinks Milk Bucket at dawn to clear invisibility. Despawn timer (48,000 ticks = 2 days). Unique exotic trade pool.
-+        - Validated with 10 comprehensive tests in `crates/mc_entities/tests/villagers_test.rs` (337 total passing tests across workspace).
++        - Validated with 10 comprehensive tests in `crates/mc_entities/tests/villagers_test.rs`.
++
++    17. **Task 54: Hostile Mob Registry, Attack Logic & Projectiles (`crates/mc_entities/src/hostile/`)**:
++        - Reverse-engineered complete hostile mob combat, ranged projectile ballistics, and special defenses from `client.jar`:
++          * `Overworld Undead & Arachnids`: Sunlight burning checks (`is_sun_sensitive_burning`); Zombie underwater conversion to Drowned (600 ticks submerged + 300 ticks shaking) and zombie villager curing (3600 ticks); Skeleton strafing bow AI with draw charge and tipped arrows (Stray Slowness I, Bogged Poison I); Spider vertical wall climbing (0.15 upward vel on horizontal collision) and pounce leaps; Creeper 30-tick fuse swelling, deflation upon target exit, and normal (3.0) vs charged (6.0) voxel explosions; Phantom insomnia tracking ($\ge 72,000$ ticks without sleep) with aerial circling and dive swoops; Witch defensive potion drinking (Instant Health, Fire Res, Water Breathing) and offensive splash potion throwing.
++          * `Illagers & Raid Monsters`: Pillager crossbow reload cycle (25 ticks) and high-speed bolt firing; Vindicator sprint strike (13.0 damage) with Johnny mode; Evoker 16-fang ripple line attack dealing 6.0 armor-piercing damage and guaranteed Totem of Undying drop; Vex no-clip flying with red charge velocity (0.4 m/tick) and life decay; Ravager 12.0 damage ram attack, 40-tick shield stun, and waking concussive roar (6.0 damage, 4.0m knockback).
++          * `Nether Hostiles`: Ghast 3D cavern flight and 10-tick mouth charge firing explosive fireballs; Blaze hovering with 3-burst small fireball barrage spaced 6 ticks apart; MagmaCube size-based death splits (Large $\rightarrow$ 3 Medium $\rightarrow$ 3 Small); Piglin gold armor pacification, 120-tick gold ingot bartering, and 300-tick Overworld zombification into Zombified Piglin.
++          * `Specialized Monsters`: Guardian and Elder Guardian laser beam locking (60-tick charge to 9.0/12.0 magic damage) and thorns spikes; Warden blindness, vibration hearing with anger escalation (0..150), 6m sniffing detection, and ribcage sonic boom beam penetrating walls (10.0 magic damage, massive knockback); Breeze projectile reflection, circular wind leaps, and concussive wind charge explosions; Creaking absolute invulnerability to direct attacks and eye-contact freezing (dot product > 0.5 freezes completely in place).
++          * `Projectiles & Explosions`: Ballistic arrow trajectories with gravity (0.05) and drag (0.99), Fireballs, Breeze Wind Charges, Evoker Fangs ground traps, and VoxelExplosions with inverse-distance damage decay ($1 - d/r$).
++        - Validated with 10 comprehensive tests in `crates/mc_entities/tests/hostile_test.rs` (347 total passing tests across workspace).
+
 
 
 +

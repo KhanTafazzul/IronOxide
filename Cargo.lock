@@ -1565,6 +1565,8 @@ dependencies = [
 name = "mc_worldgen"
 version = "0.1.0"
 dependencies = [
+ "glam",
+ "mc_entities",
  "serde",
  "serde_json",
  "zip",

@@ -165,6 +165,7 @@ impl HumanoidModel {
                 let sway = (limb_swing).sin() * 0.15 * swing_amount;
                 (base_pitch + sway, base_pitch - sway)
             }
+            _ => (0.0, 0.0),
         };
 
         // Authentic Zombie palette

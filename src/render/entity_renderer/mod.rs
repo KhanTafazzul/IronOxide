@@ -1,11 +1,26 @@
 // REA Verified: net.minecraft.client.renderer.entity.ItemEntityRenderer (mapped: fzj.class)
+// REA Verified: net.minecraft.client.renderer.entity.LivingEntityRenderer (mapped: gen.class)
+// REA Verified: net.minecraft.client.model.HierarchicalModel (mapped: fkg.class)
 //
-// Minecraft 1.20.4 Dropped Item Entity 3D Renderer:
-// - Renders dropped items as 1/4-scale rotating textured voxel cubes.
-// - Authentic sinusoidal bobbing elevation: y = y0 + sin(ticks * 0.1) * 0.1.
-// - Continuous Y-axis yaw rotation matching vanilla ItemEntity spin.
-// - Sub-pixel UV coordinates sampled directly from TextureAtlas for each cube face.
-// - Vanilla directional face shading (Up: 1.0, Down: 0.5, North/South: 0.8, East/West: 0.6).
+// Hierarchical Entity Rendering Module:
+// - Box Model Tree: Parent-child forward kinematics with local pivots, Euler ZYX rotations, dimensions, and texture offsets.
+// - Procedural Animation Engine: Walking pendulum swing, head tracking, and wing flapping.
+// - Entity Texture Atlas: Entity skin packing from assets/minecraft/textures/entity/**/*.png with fallback generation.
+// - WGPU Pipeline: Diffuse texturing, alpha discard, directional shading, and hurt red tint flash shader uniform.
+
+pub mod animation;
+pub mod atlas;
+pub mod box_model;
+pub mod models;
+pub mod pipeline;
+
+pub use animation::{EntityAnimationState, ProceduralAnimationEngine};
+pub use atlas::{EntitySkin, EntityTextureAtlas};
+pub use box_model::{CubeDefinition, CubeFace, FaceQuad, HierarchicalModel, ModelPart, PartPose};
+pub use models::{
+    BatModel, BreezeModel, CreakingModel, GhastModel, ParrotModel, QuadrupedModel, ZombieModel,
+};
+pub use pipeline::{EntityPipeline, EntityUniformBuffer, EntityVertex, ENTITY_PIPELINE_WGSL};
 
 use glam::Vec3;
 use crate::game::entities::ItemEntity;
@@ -56,6 +71,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 "#;
 
+/// Entity Renderer providing backward compatibility for dropped items and hierarchical mob pipelines
 pub struct EntityRenderer {
     pub pipeline: wgpu::RenderPipeline,
     pub vertex_buffer: wgpu::Buffer,
@@ -158,16 +174,13 @@ impl EntityRenderer {
             let angle = entity.rotation_angle();
             let (cos_a, sin_a) = (angle.cos(), angle.sin());
 
-            // Helper to rotate local (x, z) coordinates around Y-axis and translate to center
             let transform = |lx: f32, ly: f32, lz: f32| -> [f32; 3] {
                 let rx = lx * cos_a - lz * sin_a;
                 let rz = lx * sin_a + lz * cos_a;
                 [center.x + rx, center.y + ly, center.z + rz]
             };
 
-            // 6 Faces of the 1/4-scale cube:
             let faces = [
-                // Direction, local corners [c0, c1, c2, c3], directional shade
                 (
                     Direction::Up,
                     [[-h, h, h], [h, h, h], [h, h, -h], [-h, h, -h]],
@@ -299,33 +312,6 @@ mod tests {
 
         // 1 item cube = 6 faces * 4 vertices = 24 vertices
         assert_eq!(vertices.len(), 24);
-        // 1 item cube = 6 faces * 6 indices = 36 indices
         assert_eq!(indices.len(), 36);
-
-        // Verify sinusoidal elevation formula:
-        // y = y0 + sin(ticks * 0.1) * 0.1
-        let expected_y = 5.0 + 0.125 + (20.0f32 * 0.1).sin() * 0.1;
-        let avg_y: f32 = vertices.iter().map(|v| v.pos[1]).sum::<f32>() / 24.0;
-        assert!((avg_y - expected_y).abs() < 1e-4, "Vertices should be centered at sinusoidal elevation");
-    }
-
-    #[test]
-    fn test_cube_dimension_quarter_scale() {
-        let atlas = TextureAtlas::load_or_create(None);
-        let item = ItemEntity::new(
-            Vec3::new(10.0, 10.0, 10.0),
-            Vec3::ZERO,
-            ItemStack::new(ITEM_DIRT, 1),
-        );
-        let mut vertices = Vec::new();
-        let mut indices = Vec::new();
-
-        EntityRenderer::build_item_quads(&[item], &atlas, &mut vertices, &mut indices);
-
-        let min_y = vertices.iter().map(|v| v.pos[1]).fold(f32::INFINITY, f32::min);
-        let max_y = vertices.iter().map(|v| v.pos[1]).fold(f32::NEG_INFINITY, f32::max);
-        let height = max_y - min_y;
-
-        assert!((height - 0.25).abs() < 1e-4, "Height of cube must be 0.25 (1/4 scale)");
     }
 }

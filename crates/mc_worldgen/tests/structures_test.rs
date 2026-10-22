@@ -313,5 +313,248 @@ fn test_buried_treasure_generation() {
     assert_eq!(world.blocks.get(&(145, 62, -280)), Some(&SurfaceBlock::Sand));
 }
 
+#[test]
+fn test_vanilla_placement_salts_for_all_5_structures() {
+    use mc_worldgen::biomes::BiomeId;
+    use mc_worldgen::placement_salts::*;
+
+    // 1. Desert Pyramid: Spacing = 32, Separation = 8, Salt = 14357617, Biomes = [Desert]
+    assert_eq!(DESERT_PYRAMID.spacing, 32);
+    assert_eq!(DESERT_PYRAMID.separation, 8);
+    assert_eq!(DESERT_PYRAMID.salt, 14357617);
+    assert_eq!(DESERT_PYRAMID.valid_biomes, &[BiomeId::Desert]);
+    assert!(DESERT_PYRAMID.is_valid_biome(BiomeId::Desert));
+    assert!(!DESERT_PYRAMID.is_valid_biome(BiomeId::Plains));
+
+    // 2. Jungle Pyramid: Spacing = 32, Separation = 8, Salt = 14357619, Biomes = [Jungle, Bamboo Jungle]
+    assert_eq!(JUNGLE_PYRAMID.spacing, 32);
+    assert_eq!(JUNGLE_PYRAMID.separation, 8);
+    assert_eq!(JUNGLE_PYRAMID.salt, 14357619);
+    assert!(JUNGLE_PYRAMID.is_valid_biome(BiomeId::Jungle));
+    assert!(JUNGLE_PYRAMID.is_valid_biome(BiomeId::BambooJungle));
+    assert!(!JUNGLE_PYRAMID.is_valid_biome(BiomeId::Desert));
+
+    // 3. Swamp Hut: Spacing = 32, Separation = 8, Salt = 14357620, Biomes = [Swamp]
+    assert_eq!(SWAMP_HUT.spacing, 32);
+    assert_eq!(SWAMP_HUT.separation, 8);
+    assert_eq!(SWAMP_HUT.salt, 14357620);
+    assert!(SWAMP_HUT.is_valid_biome(BiomeId::Swamp));
+    assert!(!SWAMP_HUT.is_valid_biome(BiomeId::Forest));
+
+    // 4. Pillager Outpost: Spacing = 80, Separation = 24, Salt = 165745296
+    assert_eq!(PILLAGER_OUTPOST.spacing, 80);
+    assert_eq!(PILLAGER_OUTPOST.separation, 24);
+    assert_eq!(PILLAGER_OUTPOST.salt, 165745296);
+    for b in [
+        BiomeId::Plains, BiomeId::Desert, BiomeId::Savanna, BiomeId::Taiga,
+        BiomeId::SnowyPlains, BiomeId::Meadow, BiomeId::Grove, BiomeId::SnowySlopes,
+    ] {
+        assert!(PILLAGER_OUTPOST.is_valid_biome(b), "Outpost must allow {:?}", b);
+    }
+    assert!(!PILLAGER_OUTPOST.is_valid_biome(BiomeId::DeepDark));
+
+    // 5. Ancient City: Spacing = 24, Separation = 8, Salt = 20083232, Biomes = [Deep Dark], Y = -51
+    assert_eq!(ANCIENT_CITY.spacing, 24);
+    assert_eq!(ANCIENT_CITY.separation, 8);
+    assert_eq!(ANCIENT_CITY.salt, 20083232);
+    assert_eq!(ANCIENT_CITY.fixed_y, Some(-51));
+    assert!(ANCIENT_CITY.is_valid_biome(BiomeId::DeepDark));
+    assert!(!ANCIENT_CITY.is_valid_biome(BiomeId::Desert));
+}
+
+#[test]
+fn test_seed_123456789_structure_grid_and_tnt_trap_parity() {
+    use mc_worldgen::{
+        AncientCityGenerator, ChunkPos, DesertPyramidGenerator, OreBlockAccess, StructureLocator,
+        StructureType, SurfaceBlock,
+    };
+
+    let seed = 123456789i64;
+    let locator = StructureLocator::new(seed);
+
+    // 1. Assert Ancient City starting piece matches exact chunk coordinates (13, 9)
+    let ac_chunk = locator.ancient_cities.get_potential_structure_chunk(seed, 0, 0);
+    assert_eq!(ac_chunk, ChunkPos::new(13, 9), "Ancient City must generate at chunk (13, 9)");
+    assert!(locator.ancient_cities.is_structure_chunk(seed, 13, 9));
+
+    let ac_roots = locator.get_structures_in_chunk(13, 9);
+    let ac_root = ac_roots.iter().find(|r| r.structure_type == StructureType::AncientCity)
+        .expect("Ancient City root must be registered in chunk (13, 9)");
+    assert_eq!(ac_root.start_block_y, -51, "Ancient City must be fixed at Y = -51");
+
+    // Generate Ancient City at its predicted block position and verify piece bounding boxes
+    let mut ac_world = TestWorld::new();
+    let ac_placed = AncientCityGenerator::generate(
+        &mut ac_world,
+        (ac_root.start_block_x, ac_root.start_block_y, ac_root.start_block_z),
+        seed,
+        None,
+    );
+    assert!(ac_placed > 200, "Ancient City must generate portal frame, redstone lab, and wings");
+
+    // Verify reinforced deepslate frame at Y in [-51, -38]
+    let has_reinforced = ac_world.blocks.values().any(|&b| b == SurfaceBlock::ReinforcedDeepslate);
+    assert!(has_reinforced, "Ancient City must contain Reinforced Deepslate portal frame");
+
+    // Verify active Sculk Shriekers and Sensors
+    let has_shrieker = ac_world.blocks.values().any(|&b| b == SurfaceBlock::SculkShrieker);
+    let has_sensor = ac_world.blocks.values().any(|&b| b == SurfaceBlock::SculkSensor);
+    let has_catalyst = ac_world.blocks.values().any(|&b| b == SurfaceBlock::SculkCatalyst);
+    assert!(has_shrieker && has_sensor && has_catalyst, "Ancient city must have sculk ecology");
+
+    // Verify Hidden Redstone Laboratory below frame with comparator and piston door
+    let has_comparator = ac_world.blocks.values().any(|&b| b == SurfaceBlock::Comparator);
+    let has_piston = ac_world.blocks.values().any(|&b| b == SurfaceBlock::Piston);
+    assert!(has_comparator, "Laboratory must feature comparator pulse counters");
+    assert!(has_piston, "Laboratory must feature piston secret door");
+
+    // 2. Assert Desert Pyramid generates at predicted grid chunk (3, 5) with TNT trap intact at Y = 53
+    let dp_chunk = locator.desert_pyramids.get_potential_structure_chunk(seed, 0, 0);
+    assert_eq!(dp_chunk, ChunkPos::new(3, 5), "Desert Pyramid must generate at chunk (3, 5)");
+    assert!(locator.desert_pyramids.is_structure_chunk(seed, 3, 5));
+
+    let dp_roots = locator.get_structures_in_chunk(3, 5);
+    let dp_root = dp_roots.iter().find(|r| r.structure_type == StructureType::DesertPyramid)
+        .expect("Desert Pyramid root must be registered in chunk (3, 5)");
+    assert_eq!(dp_root.start_block_y, 64);
+
+    // Generate Desert Pyramid at its predicted starting position
+    let mut dp_world = TestWorld::new();
+    let origin = (dp_root.start_block_x, 64, dp_root.start_block_z); // (56, 64, 88)
+    let dp_placed = DesertPyramidGenerator::generate(&mut dp_world, origin, seed);
+    assert!(dp_placed > 500, "Desert pyramid must place base, towers, and chambers");
+
+    // Center terracotta pattern at floor level Y = 64
+    let blue_center = dp_world.get_block(origin.0 + 10, 64, origin.2 + 10);
+    assert_eq!(blue_center, SurfaceBlock::BlueTerracotta, "Center floor must be Blue Terracotta");
+
+    // ASSERT: At Y = 53, exactly 9 TNT blocks are intact directly below the drop shaft!
+    let mut tnt_count = 0;
+    for dx in 9..=11 {
+        for dz in 9..=11 {
+            let b = dp_world.get_block(origin.0 + dx, 53, origin.2 + dz);
+            if b == SurfaceBlock::TNT {
+                tnt_count += 1;
+            }
+        }
+    }
+    assert_eq!(tnt_count, 9, "Desert Pyramid must have exactly 9 TNT blocks intact at Y = 53");
+
+    // Pressure plate at Y = 54 directly on top of center TNT
+    let plate = dp_world.get_block(origin.0 + 10, 54, origin.2 + 10);
+    assert_eq!(plate, SurfaceBlock::StonePressurePlate, "Pressure plate must be at Y = 54 resting on TNT");
+
+    // 4 Loot Chests on cardinal walls surrounding the plate at Y = 54
+    let north_chest = dp_world.get_block(origin.0 + 10, 54, origin.2 + 8);
+    let south_chest = dp_world.get_block(origin.0 + 10, 54, origin.2 + 12);
+    let west_chest = dp_world.get_block(origin.0 + 8, 54, origin.2 + 10);
+    let east_chest = dp_world.get_block(origin.0 + 12, 54, origin.2 + 10);
+    assert_eq!(north_chest, SurfaceBlock::Chest);
+    assert_eq!(south_chest, SurfaceBlock::Chest);
+    assert_eq!(west_chest, SurfaceBlock::Chest);
+    assert_eq!(east_chest, SurfaceBlock::Chest);
+
+    // Archaeology basement: Suspicious Sand and Decorated Pot
+    let has_suspicious_sand = dp_world.blocks.values().any(|&b| b == SurfaceBlock::SuspiciousSand);
+    let has_decorated_pot = dp_world.blocks.values().any(|&b| b == SurfaceBlock::DecoratedPot);
+    assert!(has_suspicious_sand, "Pyramid must have 1.20+ archaeology suspicious sand");
+    assert!(has_decorated_pot, "Pyramid must have buried decorated pots");
+}
+
+#[test]
+fn test_jungle_temple_generation_and_traps() {
+    use mc_worldgen::{JungleTempleGenerator, SurfaceBlock};
+
+    let mut world = TestWorld::new();
+    let origin = (100, 64, 100);
+    let placed = JungleTempleGenerator::generate(&mut world, origin, 987654321);
+    assert!(placed > 300, "Jungle Temple must place complete 3-story structure");
+
+    // 1. Mossy and Regular Cobblestone combination
+    let has_cobble = world.blocks.values().any(|&b| b == SurfaceBlock::Cobblestone);
+    let has_mossy = world.blocks.values().any(|&b| b == SurfaceBlock::MossyCobblestone);
+    assert!(has_cobble && has_mossy);
+
+    // 2. 3-Lever puzzle
+    let lever_count = world.blocks.values().filter(|&&b| b == SurfaceBlock::Lever).count();
+    assert_eq!(lever_count, 3, "Jungle Temple must contain exactly 3 levers for combination puzzle");
+
+    // 3. Sticky Piston hidden door & 2 chests
+    let has_sticky_piston = world.blocks.values().any(|&b| b == SurfaceBlock::StickyPiston);
+    let chest_count = world.blocks.values().filter(|&&b| b == SurfaceBlock::Chest).count();
+    assert!(has_sticky_piston, "Temple must contain sticky piston door");
+    assert_eq!(chest_count, 2, "Temple must contain 1 main chest and 1 hidden chest");
+
+    // 4. Dispenser Tripwire Traps
+    let dispenser_count = world.blocks.values().filter(|&&b| b == SurfaceBlock::Dispenser).count();
+    let hook_count = world.blocks.values().filter(|&&b| b == SurfaceBlock::TripwireHook).count();
+    let string_count = world.blocks.values().filter(|&&b| b == SurfaceBlock::StringBlock).count();
+    assert_eq!(dispenser_count, 2, "Temple must contain 2 hidden arrow dispensers");
+    assert_eq!(hook_count, 4, "Temple must contain 4 tripwire hooks (2 traps * 2 hooks)");
+    assert_eq!(string_count, 2, "Temple must contain tripwire string crossings");
+}
+
+#[test]
+fn test_swamp_hut_generation_and_mob_spawn_isolation() {
+    use mc_worldgen::{SurfaceBlock, SwampHutGenerator};
+
+    let mut world = TestWorld::new();
+    let origin = (200, 62, 200);
+    let placed = SwampHutGenerator::generate(&mut world, origin);
+    assert!(placed > 50, "Swamp Hut must place wooden stilts, walls, roof, and interior");
+
+    // 1. Oak stilts, spruce planks, dark oak stairs
+    let has_oak = world.blocks.values().any(|&b| b == SurfaceBlock::OakLog);
+    let has_spruce = world.blocks.values().any(|&b| b == SurfaceBlock::SprucePlanks);
+    let has_dark_oak_stairs = world.blocks.values().any(|&b| b == SurfaceBlock::DarkOakStairs);
+    assert!(has_oak && has_spruce && has_dark_oak_stairs);
+
+    // 2. Interior Furnishings: Crafting Table, Cauldron, Potted Mushroom
+    let has_crafting = world.blocks.values().any(|&b| b == SurfaceBlock::CraftingTable);
+    let has_cauldron = world.blocks.values().any(|&b| b == SurfaceBlock::Cauldron);
+    let has_potted_mushroom = world.blocks.values().any(|&b| b == SurfaceBlock::PottedMushroom);
+    assert!(has_crafting, "Swamp hut must have crafting table");
+    assert!(has_cauldron, "Swamp hut must have witch cauldron");
+    assert!(has_potted_mushroom, "Swamp hut must have potted mushroom");
+
+    // 3. Mob spawn isolation: Only Witches and Cats permitted in 7x7x9 volume
+    let inside_pos = (origin.0 + 3, origin.1 + 3, origin.2 + 3);
+    assert!(SwampHutGenerator::is_spawn_permitted(origin, inside_pos, "minecraft:witch"));
+    assert!(SwampHutGenerator::is_spawn_permitted(origin, inside_pos, "minecraft:cat"));
+    assert!(!SwampHutGenerator::is_spawn_permitted(origin, inside_pos, "minecraft:zombie"));
+    assert!(!SwampHutGenerator::is_spawn_permitted(origin, inside_pos, "minecraft:skeleton"));
+    assert!(!SwampHutGenerator::is_spawn_permitted(origin, inside_pos, "minecraft:creeper"));
+
+    // Outside bounding box, regular spawns are permitted
+    let outside_pos = (origin.0 + 50, origin.1 + 3, origin.2 + 50);
+    assert!(SwampHutGenerator::is_spawn_permitted(origin, outside_pos, "minecraft:zombie"));
+}
+
+#[test]
+fn test_pillager_outpost_watchtower_and_accessories() {
+    use mc_worldgen::{PillagerOutpostGenerator, SurfaceBlock};
+
+    let mut world = TestWorld::new();
+    let origin = (300, 68, 300);
+    let placed = PillagerOutpostGenerator::generate(&mut world, origin, 555666777, None);
+    assert!(placed > 150, "Pillager Outpost must place watchtower and 4 accessory pieces");
+
+    // 1. 4 Support Pillars (Cobble and Dark Oak Log)
+    let has_cobble = world.blocks.values().any(|&b| b == SurfaceBlock::Cobblestone);
+    let has_dark_oak = world.blocks.values().any(|&b| b == SurfaceBlock::DarkOakLog);
+    let has_chest = world.blocks.values().any(|&b| b == SurfaceBlock::Chest);
+    assert!(has_cobble && has_dark_oak && has_chest);
+
+    // 2. Surrounding accessories: Target Tent, Iron Golem Cage, Log Pile, Scarecrows
+    let has_target = world.blocks.values().any(|&b| b == SurfaceBlock::TargetBlock);
+    let has_bars = world.blocks.values().any(|&b| b == SurfaceBlock::IronBars);
+    let has_hay = world.blocks.values().any(|&b| b == SurfaceBlock::HayBale);
+    let has_pumpkin = world.blocks.values().any(|&b| b == SurfaceBlock::CarvedPumpkin);
+    assert!(has_target, "Outpost must feature target tent");
+    assert!(has_bars, "Outpost must feature iron golem cage");
+    assert!(has_hay && has_pumpkin, "Outpost must feature scarecrows");
+}
+
+
 
 

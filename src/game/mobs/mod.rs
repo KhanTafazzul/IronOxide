@@ -70,6 +70,15 @@ impl Health {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MobType {
     Zombie,
+    Pig,
+    Cow,
+    Sheep,
+    Creeper,
+    Breeze,
+    Creaking,
+    Bat,
+    Parrot,
+    Ghast,
 }
 
 /// Mob AI State Machine states
@@ -122,6 +131,7 @@ pub struct MobEntity {
     pub mob_type: MobType,
     pub ai: MobAi,
     pub on_ground: bool,
+    pub hurt_time: f32,
 }
 
 impl MobEntity {
@@ -144,6 +154,127 @@ impl MobEntity {
             mob_type: MobType::Zombie,
             ai: MobAi::new(),
             on_ground: false,
+            hurt_time: 0.0,
+        }
+    }
+
+    pub fn new_quadruped(id: u32, pos: Vec3, mob_type: MobType) -> Self {
+        let half_w = 0.45;
+        let height = 0.9;
+        let aabb = Aabb::new(
+            Vec3::new(pos.x - half_w, pos.y, pos.z - half_w),
+            Vec3::new(pos.x + half_w, pos.y + height, pos.z + half_w),
+        );
+        Self {
+            id,
+            transform: Transform::new(pos, Vec3::ZERO),
+            velocity: Velocity::zero(),
+            aabb,
+            health: Health::new(10.0),
+            mob_type,
+            ai: MobAi::new(),
+            on_ground: false,
+            hurt_time: 0.0,
+        }
+    }
+
+    pub fn new_breeze(id: u32, pos: Vec3) -> Self {
+        let half_w = 0.3;
+        let height = 1.8;
+        let aabb = Aabb::new(
+            Vec3::new(pos.x - half_w, pos.y, pos.z - half_w),
+            Vec3::new(pos.x + half_w, pos.y + height, pos.z + half_w),
+        );
+        Self {
+            id,
+            transform: Transform::new(pos, Vec3::ZERO),
+            velocity: Velocity::zero(),
+            aabb,
+            health: Health::new(30.0),
+            mob_type: MobType::Breeze,
+            ai: MobAi::new(),
+            on_ground: false,
+            hurt_time: 0.0,
+        }
+    }
+
+    pub fn new_creaking(id: u32, pos: Vec3) -> Self {
+        let half_w = 0.45;
+        let height = 2.7;
+        let aabb = Aabb::new(
+            Vec3::new(pos.x - half_w, pos.y, pos.z - half_w),
+            Vec3::new(pos.x + half_w, pos.y + height, pos.z + half_w),
+        );
+        Self {
+            id,
+            transform: Transform::new(pos, Vec3::ZERO),
+            velocity: Velocity::zero(),
+            aabb,
+            health: Health::new(1.0),
+            mob_type: MobType::Creaking,
+            ai: MobAi::new(),
+            on_ground: false,
+            hurt_time: 0.0,
+        }
+    }
+
+    pub fn new_ghast(id: u32, pos: Vec3) -> Self {
+        let half_w = 2.0;
+        let height = 4.0;
+        let aabb = Aabb::new(
+            Vec3::new(pos.x - half_w, pos.y, pos.z - half_w),
+            Vec3::new(pos.x + half_w, pos.y + height, pos.z + half_w),
+        );
+        Self {
+            id,
+            transform: Transform::new(pos, Vec3::ZERO),
+            velocity: Velocity::zero(),
+            aabb,
+            health: Health::new(10.0),
+            mob_type: MobType::Ghast,
+            ai: MobAi::new(),
+            on_ground: false,
+            hurt_time: 0.0,
+        }
+    }
+
+    pub fn new_bat(id: u32, pos: Vec3) -> Self {
+        let half_w = 0.25;
+        let height = 0.9;
+        let aabb = Aabb::new(
+            Vec3::new(pos.x - half_w, pos.y, pos.z - half_w),
+            Vec3::new(pos.x + half_w, pos.y + height, pos.z + half_w),
+        );
+        Self {
+            id,
+            transform: Transform::new(pos, Vec3::ZERO),
+            velocity: Velocity::zero(),
+            aabb,
+            health: Health::new(6.0),
+            mob_type: MobType::Bat,
+            ai: MobAi::new(),
+            on_ground: false,
+            hurt_time: 0.0,
+        }
+    }
+
+    pub fn new_parrot(id: u32, pos: Vec3) -> Self {
+        let half_w = 0.25;
+        let height = 0.9;
+        let aabb = Aabb::new(
+            Vec3::new(pos.x - half_w, pos.y, pos.z - half_w),
+            Vec3::new(pos.x + half_w, pos.y + height, pos.z + half_w),
+        );
+        Self {
+            id,
+            transform: Transform::new(pos, Vec3::ZERO),
+            velocity: Velocity::zero(),
+            aabb,
+            health: Health::new(6.0),
+            mob_type: MobType::Parrot,
+            ai: MobAi::new(),
+            on_ground: false,
+            hurt_time: 0.0,
         }
     }
 

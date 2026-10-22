@@ -5,6 +5,7 @@ pub mod features;
 pub mod ores;
 pub mod seed_pipeline;
 pub mod pipeline;
+pub mod spawning;
 pub mod structures;
 pub mod surface;
 pub mod vegetation;
@@ -67,10 +68,27 @@ pub use seed_pipeline::random::{
 };
 pub use seed_pipeline::terrain::{ChunkSectionDensity, OverworldGenerator, MAX_Y, MIN_Y, SEA_LEVEL};
 pub use structures::{
-    BastionRemnantGenerator, BastionType, BuriedTreasureGenerator, ChunkPos,
-    ConcentricRingsPlacement, JigsawStructureAssembler, LegacyRandom, MineshaftGenerator,
-    MineshaftType, NetherFortressGenerator, OceanMonumentGenerator, PlacedJigsawPiece,
-    PoolElement, PoolProjection, RandomSpreadPlacement, SpreadType, StructureLocator,
-    StructureRoot, StructureTemplatePool, StructureType, TemplatePoolEntry, TemplatePoolRegistry,
-    WeightedAliasTable,
+    placement_salts,
+    standalone,
+    jigsaw,
+    AncientCityGenerator, BastionRemnantGenerator, BastionType, BuriedTreasureGenerator, ChunkPos,
+    ConcentricRingsPlacement, DesertPyramidGenerator, JigsawStructureAssembler, JungleTempleGenerator,
+    LegacyRandom, MineshaftGenerator, MineshaftType, MobSpawnBoundingBox, NetherFortressGenerator,
+    OceanMonumentGenerator, PillagerOutpostGenerator, PlacedJigsawPiece, PoolElement, PoolProjection,
+    RandomSpreadPlacement, SculkShriekerState, SpreadType, StructureLocator, StructurePlacementDef,
+    StructureRoot, StructureTemplatePool, StructureType, SwampHutGenerator, TemplatePoolEntry,
+    TemplatePoolRegistry, WeightedAliasTable, ANCIENT_CITY, ANCIENT_CITY_CHEST_LOOT,
+    DESERT_PYRAMID, DESERT_PYRAMID_ARCHAEOLOGY_LOOT, DESERT_PYRAMID_CHEST_LOOT,
+    JUNGLE_PYRAMID, JUNGLE_TEMPLE_CHEST_LOOT, JUNGLE_TEMPLE_DISPENSER_LOOT,
+    PILLAGER_OUTPOST, PILLAGER_OUTPOST_CHEST_LOOT, SWAMP_HUT,
+};
+pub use spawning::{
+    can_spawn_at, category_for_entity, has_unobstructed_aabb, is_grass_block, is_passable_space,
+    is_solid_floor, is_valid_spawn_distance, is_water, parse_entity_type, should_despawn,
+    verify_ambient_conditions, verify_aquatic_conditions, verify_creature_conditions,
+    verify_monster_conditions, BiomeSpawnRegistry, BiomeSpawnSettings, MobCategory,
+    MobCategoryTracker, NaturalSpawner, SpawnEnvironment, SpawnedMob, SpawnerData,
+    DEFAULT_DESPAWN_DISTANCE, DEFAULT_DESPAWN_DISTANCE_SQ, DESPAWN_AGE_THRESHOLD,
+    DESPAWN_CHANCE_1_IN, MAGIC_NUMBER, MIN_SPAWN_DISTANCE, MIN_SPAWN_DISTANCE_SQ,
+    NO_DESPAWN_DISTANCE, NO_DESPAWN_DISTANCE_SQ,
 };

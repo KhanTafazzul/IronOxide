@@ -6,7 +6,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Language: Rust 2024](https://img.shields.io/badge/Language-Rust_2024-orange.svg)](https://www.rust-lang.org/)
 [![Graphics: WGPU](https://img.shields.io/badge/Graphics-WGPU_/_WGSL-green.svg)](https://wgpu.rs/)
-[![Tests: 347 Passing](https://img.shields.io/badge/Tests-347_Passed-brightgreen.svg)]()
+[![Tests: 377 Passing](https://img.shields.io/badge/Tests-377_Passed-brightgreen.svg)]()
 [![Parity: Minecraft 1.20.4](https://img.shields.io/badge/Parity-Minecraft_1.20.4-red.svg)](https://minecraft.net/)
 
 ---
@@ -57,13 +57,13 @@ IronOxide is organized into clean, high-performance modular crates:
 ```text
 IronOxide/
 ├── crates/
-│   ├── mc_worldgen/    # 1:1 seed-exact noise, 47+ biomes, carvers, aquifers, ores & template pools
+│   ├── mc_worldgen/    # 1:1 seed-exact noise, 47+ biomes, carvers, aquifers, 100% structures & natural spawner
 │   ├── mc_items/       # 1,329+ item enum registry, tool harvest levels, and armor tiers
 │   ├── mc_crafting/    # Serde shaped/shapeless recipe parser (822 recipes from client.jar) & O(1) cache
 │   ├── mc_gameplay/    # Workstations engine (Crafting Table, Furnaces, Anvil, Smithing)
 │   ├── mc_entities/    # Mob ECS, GoalSelector AI, 3D navigation, Land/Aquatic/Hostile Mobs, Villagers & Golems
 └── src/
-    ├── render/         # WGPU pipeline, greedy mesher, dynamic lighting, weather & HUD
+    ├── render/         # WGPU pipeline, greedy mesher, hierarchical box models, animations & HUD
     ├── game/           # Player physics, raycasting, survival stats, portals & mob AI
     ├── world/          # Block registry, cellular fluids, dual-nibble lighting & dimensions
     └── storage/        # Anvil .mca region serializer, Gzip NBT parser & level.dat
@@ -86,7 +86,7 @@ IronOxide/
 git clone https://github.com/KhanTafazzul/IronOxide.git
 cd IronOxide
 
-# Run the automated test suite (347 tests)
+# Run the automated test suite (377 tests)
 cargo test --workspace
 
 # Launch the client in optimized release mode

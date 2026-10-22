@@ -60,6 +60,7 @@ pub enum EntityType {
     Mooshroom,
     Goat,
     Allay,
+    PolarBear,
     Cod,
     Salmon,
     Pufferfish,
@@ -149,6 +150,8 @@ impl EntityType {
                 | Self::Sniffer
                 | Self::Armadillo
                 | Self::Mooshroom
+                | Self::Goat
+                | Self::PolarBear
         )
     }
 

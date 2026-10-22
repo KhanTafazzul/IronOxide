@@ -247,6 +247,11 @@ pub enum StructureType {
     Mineshaft,
     OceanMonument,
     BuriedTreasure,
+    DesertPyramid,
+    JungleTemple,
+    SwampHut,
+    PillagerOutpost,
+    AncientCity,
 }
 
 impl StructureType {
@@ -262,6 +267,11 @@ impl StructureType {
             StructureType::Mineshaft => "minecraft:mineshaft",
             StructureType::OceanMonument => "minecraft:monument",
             StructureType::BuriedTreasure => "minecraft:buried_treasure",
+            StructureType::DesertPyramid => "minecraft:desert_pyramid",
+            StructureType::JungleTemple => "minecraft:jungle_pyramid",
+            StructureType::SwampHut => "minecraft:swamp_hut",
+            StructureType::PillagerOutpost => "minecraft:pillager_outpost",
+            StructureType::AncientCity => "minecraft:ancient_city",
         }
     }
 }
@@ -307,6 +317,13 @@ pub struct StructureLocator {
     pub ocean_monuments: RandomSpreadPlacement,
     pub mineshafts: RandomSpreadPlacement,
     pub buried_treasures: RandomSpreadPlacement,
+
+    // Task 57: 5 Structures
+    pub desert_pyramids: RandomSpreadPlacement,
+    pub jungle_temples: RandomSpreadPlacement,
+    pub swamp_huts: RandomSpreadPlacement,
+    pub pillager_outposts: RandomSpreadPlacement,
+    pub ancient_cities: RandomSpreadPlacement,
 }
 
 impl StructureLocator {
@@ -327,6 +344,13 @@ impl StructureLocator {
         let mineshafts = RandomSpreadPlacement::new(1, 0, 0, SpreadType::Linear);
         let buried_treasures = RandomSpreadPlacement::new(1, 0, 0, SpreadType::Linear);
 
+        // Task 57: 5 Structures
+        let desert_pyramids = RandomSpreadPlacement::new(32, 8, 14357617, SpreadType::Linear);
+        let jungle_temples = RandomSpreadPlacement::new(32, 8, 14357619, SpreadType::Linear);
+        let swamp_huts = RandomSpreadPlacement::new(32, 8, 14357620, SpreadType::Linear);
+        let pillager_outposts = RandomSpreadPlacement::new(80, 24, 165745296, SpreadType::Linear);
+        let ancient_cities = RandomSpreadPlacement::new(24, 8, 20083232, SpreadType::Linear);
+
         Self {
             world_seed,
             stronghold_placement,
@@ -341,6 +365,11 @@ impl StructureLocator {
             ocean_monuments,
             mineshafts,
             buried_treasures,
+            desert_pyramids,
+            jungle_temples,
+            swamp_huts,
+            pillager_outposts,
+            ancient_cities,
         }
     }
 
@@ -385,6 +414,26 @@ impl StructureLocator {
 
         if self.ocean_monuments.is_structure_chunk(self.world_seed, chunk_x, chunk_z) {
             structures.push(StructureRoot::new(StructureType::OceanMonument, pos, 40));
+        }
+
+        if self.desert_pyramids.is_structure_chunk(self.world_seed, chunk_x, chunk_z) {
+            structures.push(StructureRoot::new(StructureType::DesertPyramid, pos, 64));
+        }
+
+        if self.jungle_temples.is_structure_chunk(self.world_seed, chunk_x, chunk_z) {
+            structures.push(StructureRoot::new(StructureType::JungleTemple, pos, 64));
+        }
+
+        if self.swamp_huts.is_structure_chunk(self.world_seed, chunk_x, chunk_z) {
+            structures.push(StructureRoot::new(StructureType::SwampHut, pos, 64));
+        }
+
+        if self.pillager_outposts.is_structure_chunk(self.world_seed, chunk_x, chunk_z) {
+            structures.push(StructureRoot::new(StructureType::PillagerOutpost, pos, 64));
+        }
+
+        if self.ancient_cities.is_structure_chunk(self.world_seed, chunk_x, chunk_z) {
+            structures.push(StructureRoot::new(StructureType::AncientCity, pos, -51));
         }
 
         structures

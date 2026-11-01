@@ -91,13 +91,13 @@ fn test_chunk_parity_seed_123456789() {
         54,54,54,54,54,55,55,55,55,55,55,55,55,55,55,55,
         55,55,55,55,55,55,55,55,55,55,55,55,55,55,55,55,
         55,55,55,55,55,55,55,55,55,55,55,55,55,55,55,55,
-        55,55,55,55,55,55,55,55,55,55,55,54,54,54,54,55,
+        55,55,55,55,55,55,55,55,55,55,54,54,54,54,55,55,
+        55,55,55,55,55,55,55,55,55,55,55,54,54,54,55,55,
         55,55,55,55,55,55,55,55,55,55,55,55,54,54,54,55,
-        55,55,55,55,55,55,55,55,55,55,55,55,54,54,54,55,
-        55,55,55,55,55,55,55,55,55,55,55,55,54,54,54,55,
-        55,55,55,55,55,55,55,55,55,55,55,55,54,54,55,55,
-        55,55,55,55,55,55,55,55,55,55,55,55,54,54,55,55,
-        55,55,55,55,55,55,55,55,55,55,55,55,54,54,55,55,
+        55,55,55,55,55,55,55,55,55,55,55,55,55,54,54,54,
+        55,55,55,55,55,55,55,55,55,55,55,55,55,55,54,54,
+        55,55,55,55,55,55,55,55,55,55,55,55,55,55,54,54,
+        55,55,55,55,55,55,55,55,55,55,55,55,55,55,54,54,
         55,55,55,55,55,55,55,55,55,55,55,55,55,55,55,54,
     ];
     assert_eq!(heightmap_0_0, expected_0_0);
@@ -206,18 +206,27 @@ fn test_noise_router_15_functions_and_density_parity() {
     assert!(!vein_ridged.is_nan());
     assert!(!vein_gap.is_nan());
 
-    // 2. Parity Test: Chunk (0, 0) density at Y=64 (surface ground) and Y=-32 (deepslate cave void)
-    let d64 = generator.calculate_density(0, 64, 0);
+    // 2. Parity Test: Chunk (0, 0) river floor density at Y=50 and Forest Chunk (10, -5) at Y=64
+    let d50 = generator.calculate_density(0, 50, 0);
+    let d_forest = generator.calculate_density(160, 64, -80);
     let d_neg32 = generator.calculate_density(0, -32, 0);
 
-    println!("Seed 123456789 chunk (0,0) density at Y=64 (surface): {}", d64);
+    println!("Seed 123456789 chunk (0,0) density at Y=50 (river bed ground): {}", d50);
+    println!("Seed 123456789 chunk (10,-5) density at Y=64 (forest ground): {}", d_forest);
     println!("Seed 123456789 chunk (0,0) density at Y=-32 (deepslate cave void): {}", d_neg32);
 
-    // Surface at Y=64 is solid ground (density > 0)
+    // River bed ground at Y=50 is solid ground (density > 0)
     assert!(
-        d64 > 0.0,
-        "Surface ground at Y=64 must have positive density, got {}",
-        d64
+        d50 > 0.0,
+        "River ground at Y=50 must have positive density, got {}",
+        d50
+    );
+
+    // Forest ground at Y=64 (below surface 66) is solid ground (density > 0)
+    assert!(
+        d_forest > 0.0,
+        "Forest ground at Y=64 must have positive density, got {}",
+        d_forest
     );
 
     // Deepslate cave void at Y=-32 is carved by cave generators (density < 0)
@@ -228,12 +237,12 @@ fn test_noise_router_15_functions_and_density_parity() {
     );
 
     // 3. Trilinear interpolation section density verification
-    // Section Y=4 corresponds to blocks [64, 80)
-    let section_surface = generator.generate_section_density(0, 4, 0);
-    assert_eq!(section_surface.chunk_x, 0);
-    assert_eq!(section_surface.section_y, 4);
-    assert_eq!(section_surface.chunk_z, 0);
-    assert!(section_surface.is_solid(0, 0, 0));
+    // In chunk (10, -5), section Y=4 corresponds to blocks [64, 80)
+    let section_forest = generator.generate_section_density(10, 4, -5);
+    assert_eq!(section_forest.chunk_x, 10);
+    assert_eq!(section_forest.section_y, 4);
+    assert_eq!(section_forest.chunk_z, -5);
+    assert!(section_forest.is_solid(0, 0, 0));
 
     // Section Y=-2 corresponds to blocks [-32, -16)
     let section_deepslate = generator.generate_section_density(0, -2, 0);

@@ -79,7 +79,19 @@ impl ImprovedNoise {
         self.p[(idx & 255) as usize] as usize
     }
 
+    #[inline]
     pub fn sample(&self, x: double, y: double, z: double) -> double {
+        self.sample_smeared(x, y, z, 0.0, 0.0)
+    }
+
+    pub fn sample_smeared(
+        &self,
+        x: double,
+        y: double,
+        z: double,
+        fudge_scale: double,
+        input_y: double,
+    ) -> double {
         let x_off = x + self.xo;
         let y_off = y + self.yo;
         let z_off = z + self.zo;
@@ -92,6 +104,19 @@ impl ImprovedNoise {
         let dy = y_off - (sec_y as f64);
         let dz = z_off - (sec_z as f64);
 
+        let fudge = if fudge_scale != 0.0 {
+            let limited_y = if input_y >= 0.0 && input_y < dy {
+                input_y
+            } else {
+                dy
+            };
+            (floor_int(limited_y / fudge_scale + 1.0000000116860974e-7) as f64) * fudge_scale
+        } else {
+            0.0
+        };
+
+        let dy_fudged = dy - fudge;
+
         let u = smoothstep(dx);
         let v = smoothstep(dy);
         let w = smoothstep(dz);
@@ -103,14 +128,14 @@ impl ImprovedNoise {
         let ab = self.p_lookup((a as i32) + sec_y + 1);
         let bb = self.p_lookup((b as i32) + sec_y + 1);
 
-        let g000 = grad_dot(self.p_lookup((aa as i32) + sec_z), dx, dy, dz);
-        let g100 = grad_dot(self.p_lookup((ba as i32) + sec_z), dx - 1.0, dy, dz);
-        let g010 = grad_dot(self.p_lookup((ab as i32) + sec_z), dx, dy - 1.0, dz);
-        let g110 = grad_dot(self.p_lookup((bb as i32) + sec_z), dx - 1.0, dy - 1.0, dz);
-        let g001 = grad_dot(self.p_lookup((aa as i32) + sec_z + 1), dx, dy, dz - 1.0);
-        let g101 = grad_dot(self.p_lookup((ba as i32) + sec_z + 1), dx - 1.0, dy, dz - 1.0);
-        let g011 = grad_dot(self.p_lookup((ab as i32) + sec_z + 1), dx, dy - 1.0, dz - 1.0);
-        let g111 = grad_dot(self.p_lookup((bb as i32) + sec_z + 1), dx - 1.0, dy - 1.0, dz - 1.0);
+        let g000 = grad_dot(self.p_lookup((aa as i32) + sec_z), dx, dy_fudged, dz);
+        let g100 = grad_dot(self.p_lookup((ba as i32) + sec_z), dx - 1.0, dy_fudged, dz);
+        let g010 = grad_dot(self.p_lookup((ab as i32) + sec_z), dx, dy_fudged - 1.0, dz);
+        let g110 = grad_dot(self.p_lookup((bb as i32) + sec_z), dx - 1.0, dy_fudged - 1.0, dz);
+        let g001 = grad_dot(self.p_lookup((aa as i32) + sec_z + 1), dx, dy_fudged, dz - 1.0);
+        let g101 = grad_dot(self.p_lookup((ba as i32) + sec_z + 1), dx - 1.0, dy_fudged, dz - 1.0);
+        let g011 = grad_dot(self.p_lookup((ab as i32) + sec_z + 1), dx, dy_fudged - 1.0, dz - 1.0);
+        let g111 = grad_dot(self.p_lookup((bb as i32) + sec_z + 1), dx - 1.0, dy_fudged - 1.0, dz - 1.0);
 
         let x1 = g000 + u * (g100 - g000);
         let x2 = g010 + u * (g110 - g010);
@@ -133,6 +158,7 @@ pub fn wrap_coord(c: double) -> double {
 #[derive(Clone, Debug)]
 pub struct PerlinNoise {
     pub octaves: Vec<Option<ImprovedNoise>>,
+    pub amplitudes: Vec<double>,
     pub first_octave: i32,
     pub scale_factor: double,
     pub amplitude_factor: double,
@@ -164,6 +190,7 @@ impl PerlinNoise {
 
         Self {
             octaves,
+            amplitudes: amplitudes.to_vec(),
             first_octave,
             scale_factor,
             amplitude_factor,
@@ -175,12 +202,12 @@ impl PerlinNoise {
         let mut cur_scale = self.scale_factor;
         let mut cur_amp = self.amplitude_factor;
 
-        for oct in &self.octaves {
+        for (i, oct) in self.octaves.iter().enumerate() {
             if let Some(noise) = oct {
                 let nx = wrap_coord(x * cur_scale);
                 let ny = wrap_coord(y * cur_scale);
                 let nz = wrap_coord(z * cur_scale);
-                total += noise.sample(nx, ny, nz) * cur_amp;
+                total += noise.sample(nx, ny, nz) * self.amplitudes[i] * cur_amp;
             }
             cur_scale *= 2.0;
             cur_amp /= 2.0;

@@ -68,7 +68,7 @@ impl CheeseCaveSampler {
 
         // Entrance modulation
         let entrance = self.cave_entrance.sample(x * 0.75, y * 0.5, z * 0.75);
-        let threshold = 0.12 - entrance * 0.05;
+        let threshold = 0.45 - entrance * 0.05;
 
         // Positive density exceeding threshold hollows out large cavern chamber
         cheese_val * layer_mod > threshold

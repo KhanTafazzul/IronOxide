@@ -75,6 +75,11 @@ impl LegacyRandom {
     }
 
     #[inline]
+    pub fn next_int_unbounded(&mut self) -> i32 {
+        self.next(32)
+    }
+
+    #[inline]
     pub fn next_int_bounded(&mut self, bound: i32) -> i32 {
         if bound <= 0 {
             return 0;
@@ -84,11 +89,22 @@ impl LegacyRandom {
         }
         let mut bits = self.next(31);
         let mut val = bits % bound;
-        while bits - val + (bound - 1) < 0 {
+        while bits.wrapping_sub(val).wrapping_add(bound - 1) < 0 {
             bits = self.next(31);
             val = bits % bound;
         }
         val
+    }
+
+    #[inline]
+    pub fn next_long(&mut self) -> i64 {
+        let hi = (self.next(32) as i64) << 32;
+        hi.wrapping_add(self.next(32) as i64)
+    }
+
+    #[inline]
+    pub fn next_boolean(&mut self) -> bool {
+        self.next(1) != 0
     }
 
     #[inline]

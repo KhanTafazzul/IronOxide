@@ -1,15 +1,15 @@
 //! Vertical density sliders, cave noise routers (cheese, spaghetti 2D, spaghetti 3D, noodle, aquifers)
 //! and 3D blended noise matching Minecraft 1.20+ vanilla density pipeline.
 
-use super::noise::{NormalNoise, PerlinNoise};
+use super::noise::{wrap_coord, ImprovedNoise, NormalNoise};
 use super::random::{double, PositionalRandomFactory};
 
-/// Minecraft classic 3D BlendedNoise (net.minecraft.world.level.levelgen.synth.BlendedNoise).
+/// Minecraft classic 3D BlendedNoise (net.minecraft.world.level.levelgen.synth.BlendedNoise / edr).
 #[derive(Clone, Debug)]
 pub struct BlendedNoise {
-    pub min_limit: PerlinNoise,
-    pub max_limit: PerlinNoise,
-    pub main_noise: PerlinNoise,
+    pub min_limit: Vec<ImprovedNoise>,
+    pub max_limit: Vec<ImprovedNoise>,
+    pub main_noise: Vec<ImprovedNoise>,
     pub xz_scale: double,
     pub y_scale: double,
     pub xz_factor: double,
@@ -22,14 +22,27 @@ impl BlendedNoise {
         let factory = PositionalRandomFactory::from_world_seed(world_seed);
         let mut rng = factory.from_hash_of("minecraft:terrain");
 
-        let f_min = rng.fork_positional();
-        let min_limit = PerlinNoise::from_factory(&f_min, -15, &[1.0; 16]);
+        // Minecraft 1.20.4 edv.a(auv, IntStream.rangeClosed(-15, 0)):
+        // In edv constructor with legacy=false:
+        // b[15] is created first, then b[14] down to b[0].
+        // Accessor edv.a(i) returns b[arraylength - 1 - i].
+        // For i = 0, this returns b[15] (the first created octave).
+        // Therefore, min_limit[i] maps directly to the i-th created octave without reversal.
+        let mut min_limit = Vec::with_capacity(16);
+        for _ in 0..16 {
+            min_limit.push(ImprovedNoise::new(&mut rng));
+        }
 
-        let f_max = rng.fork_positional();
-        let max_limit = PerlinNoise::from_factory(&f_max, -15, &[1.0; 16]);
+        let mut max_limit = Vec::with_capacity(16);
+        for _ in 0..16 {
+            max_limit.push(ImprovedNoise::new(&mut rng));
+        }
 
-        let f_main = rng.fork_positional();
-        let main_noise = PerlinNoise::from_factory(&f_main, -7, &[1.0; 8]);
+        // Main noise: rangeClosed(-7, 0) -> 8 octaves
+        let mut main_noise = Vec::with_capacity(8);
+        for _ in 0..8 {
+            main_noise.push(ImprovedNoise::new(&mut rng));
+        }
 
         Self {
             min_limit,
@@ -43,7 +56,7 @@ impl BlendedNoise {
         }
     }
 
-    pub fn sample(&self, block_x: i32, block_y: i32, block_z: i32) -> double {
+    pub fn sample(&self, block_x: i32, block_y: i32, block_z: i32) -> f64 {
         let x = (block_x as f64) * 684.412 * self.xz_scale;
         let y = (block_y as f64) * 684.412 * self.y_scale;
         let z = (block_z as f64) * 684.412 * self.xz_scale;
@@ -52,18 +65,56 @@ impl BlendedNoise {
         let y_scaled = y / self.y_factor;
         let z_scaled = z / self.xz_factor;
 
-        let main_val = self.main_noise.sample(x_scaled, y_scaled, z_scaled);
-        let alpha = ((main_val / 10.0) + 1.0) * 0.5;
+        let smear = 684.412 * self.y_scale * self.smear_scale;
+        let smear_main = smear / self.y_factor;
 
-        if alpha <= 0.0 {
-            self.min_limit.sample(x, y, z) / 128.0
-        } else if alpha >= 1.0 {
-            self.max_limit.sample(x, y, z) / 128.0
-        } else {
-            let min_val = self.min_limit.sample(x, y, z) / 128.0;
-            let max_val = self.max_limit.sample(x, y, z) / 128.0;
-            min_val + alpha * (max_val - min_val)
+        let mut main_sum = 0.0;
+        let mut freq = 1.0;
+        for i in 0..8 {
+            let sx = wrap_coord(x_scaled * freq);
+            let sy = wrap_coord(y_scaled * freq);
+            let sz = wrap_coord(z_scaled * freq);
+            let val = self.main_noise[i].sample_smeared(sx, sy, sz, smear_main * freq, y_scaled * freq);
+            main_sum += val / freq;
+            freq /= 2.0;
         }
+
+        let alpha = ((main_sum / 10.0) + 1.0) / 2.0;
+
+        let skip_min = alpha >= 1.0;
+        let skip_max = alpha <= 0.0;
+
+        let mut min_sum = 0.0;
+        let mut max_sum = 0.0;
+        let mut freq = 1.0;
+        for i in 0..16 {
+            let sx = wrap_coord(x * freq);
+            let sy = wrap_coord(y * freq);
+            let sz = wrap_coord(z * freq);
+            let fudge_scale = smear * freq;
+            let input_y = y * freq;
+
+            if !skip_min {
+                let val = self.min_limit[i].sample_smeared(sx, sy, sz, fudge_scale, input_y);
+                min_sum += val / freq;
+            }
+            if !skip_max {
+                let val = self.max_limit[i].sample_smeared(sx, sy, sz, fudge_scale, input_y);
+                max_sum += val / freq;
+            }
+            freq /= 2.0;
+        }
+
+        let min_val = min_sum / 512.0;
+        let max_val = max_sum / 512.0;
+        let lerped = if alpha <= 0.0 {
+            min_val
+        } else if alpha >= 1.0 {
+            max_val
+        } else {
+            min_val + alpha * (max_val - min_val)
+        };
+        lerped / 128.0
     }
 }
 

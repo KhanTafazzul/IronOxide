@@ -179,6 +179,21 @@ impl ClimateSampler {
 
         TargetPoint::from_floats(t, h, c, e, d, w)
     }
+
+    /// Evaluates raw continentalness, erosion, and ridges/weirdness without long quantization.
+    #[inline]
+    pub fn sample_raw_climate(&self, block_x: i32, block_z: i32) -> (f64, f64, f64) {
+        let x = block_x as f64;
+        let z = block_z as f64;
+        let shift_x = self.offset_noise.sample(x * 0.25, 0.0, z * 0.25) * 4.0;
+        let shift_z = self.offset_noise.sample(z * 0.25, x * 0.25, 0.0) * 4.0;
+        let sample_x = (x * 0.25) + shift_x;
+        let sample_z = (z * 0.25) + shift_z;
+        let c = self.continentalness_noise.sample(sample_x, 0.0, sample_z);
+        let e = self.erosion_noise.sample(sample_x, 0.0, sample_z);
+        let w = self.ridge_noise.sample(sample_x, 0.0, sample_z);
+        (c, e, w)
+    }
 }
 
 /// Static embedded Overworld biome lookup table containing all 7,593 points.

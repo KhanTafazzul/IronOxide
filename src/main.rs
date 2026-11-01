@@ -16,8 +16,9 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
 
 use audio::{AudioSystem, FootstepTracker, SoundEvent, SoundType};
-use game::chunk_manager::{ChunkManager, GpuChunkMesh, DEFAULT_CHUNK_RADIUS};
+use game::chunk_manager::{buffer_to_chunk_sections, ChunkManager, GpuChunkMesh, DEFAULT_CHUNK_RADIUS};
 use game::inventory::{ItemStack, PlayerInventory};
+use mc_worldgen::pipeline::{generate_chunk_column_pipeline, OverworldGenerator};
 use game::stats::PlayerStats;
 use game::{
     raycast_voxel, Aabb, BlockMiningTracker, ItemEntityManager, MobEcs, MobEvent, MiningUpdateResult, PlayerInput,
@@ -78,52 +79,8 @@ impl<'a> GameApp<'a> {
         let mut storage = WorldStorageManager::new("World");
         let mut world = World::new();
 
-        // Check if spawn chunk column (0, 0) exists in persistent .mca region storage
-        let mut loaded = false;
-        if let Ok(Some(sections)) = storage.load_chunk_column(0, 0) {
-            println!("[Storage] Loaded {} sections from Anvil region file for chunk (0, 0)", sections.len());
-            for (sec_y, sec, light_opt) in sections {
-                let sec_pos = glam::IVec3::new(0, sec_y, 0);
-                world.sections.insert(sec_pos, sec);
-                if let Some(light) = light_opt {
-                    world.lighting.sections.insert(sec_pos, light);
-                }
-            }
-            loaded = true;
-        }
-
-        if !loaded {
-            // Build initial ground platform at y = 0
-            for x in 0..16 {
-                for z in 0..16 {
-                    world.set_block_at(glam::IVec3::new(x, 0, z), BlockType::GrassBlock);
-                }
-            }
-            // Stepping blocks to test interaction and step-up
-            world.set_block_at(glam::IVec3::new(8, 1, 8), BlockType::Stone);
-            world.set_block_at(glam::IVec3::new(8, 1, 9), BlockType::Cobblestone);
-            // Point light source: Torch emits light level 14
-            world.set_block_at(glam::IVec3::new(8, 2, 8), BlockType::Torch);
-
-            // Initialize daylight / skylight across the spawn platform
-            for x in 0..16 {
-                for z in 0..16 {
-                    world.lighting.update_skylight_column(x, z, 15, 0, &world.sections);
-                }
-            }
-
-            // Mark spawn chunk dirty so it will be saved to saves/WorldName/region/r.0.0.mca
-            storage.mark_dirty(0, 0);
-        }
-
-        let mut meshes = HashMap::new();
-        for (&sec_pos, sec) in &world.sections {
-            let mesh = greedy_mesh_section(sec, &atlas, &world);
-            meshes.insert(sec_pos, mesh);
-        }
-
-        // Load level.dat or initialize default world metadata
-        let level_data = match storage.load_level_data() {
+        // 1. Load level.dat or initialize default world metadata (so we have seed and world name)
+        let mut level_data = match storage.load_level_data() {
             Ok(Some(data)) => {
                 println!(
                     "[LevelData] Loaded world '{}' (GameType: {}, DayTime: {}, PlayerPos: {:?})",
@@ -144,6 +101,59 @@ impl<'a> GameApp<'a> {
                 LevelData::new("World")
             }
         };
+
+        // 2. Check if spawn chunk column (0, 0) exists in persistent .mca region storage
+        let mut loaded = false;
+        if let Ok(Some(sections)) = storage.load_chunk_column(0, 0) {
+            println!("[Storage] Loaded {} sections from Anvil region file for chunk (0, 0)", sections.len());
+            for (sec_y, sec, light_opt) in sections {
+                let sec_pos = glam::IVec3::new(0, sec_y, 0);
+                world.sections.insert(sec_pos, sec);
+                if let Some(light) = light_opt {
+                    world.lighting.sections.insert(sec_pos, light);
+                }
+            }
+            loaded = true;
+        }
+
+        if !loaded {
+            println!("[WorldGen] Generating natural spawn chunk (0, 0) via OverworldGenerator pipeline (seed: {})...", level_data.seed);
+            let generator = OverworldGenerator::new(level_data.seed);
+            let buffer = generate_chunk_column_pipeline(&generator, 0, 0);
+            let sections = buffer_to_chunk_sections(&buffer);
+            println!("[WorldGen] Generated {} non-empty sections for chunk (0, 0)", sections.len());
+            for (sec_y, sec, light_opt) in sections {
+                let sec_pos = glam::IVec3::new(0, sec_y, 0);
+                world.sections.insert(sec_pos, sec);
+                if let Some(light) = light_opt {
+                    world.lighting.sections.insert(sec_pos, light);
+                }
+            }
+
+            // Determine true surface height at spawn point (8, 8)
+            let surface_y = generator.get_surface_height(8, 8);
+            let spawn_y = (surface_y.max(64) as f64) + 1.0;
+            println!("[WorldGen] Spawn point (8, 8) surface Y: {}. Placing player at Y={:.1}", surface_y, spawn_y);
+            level_data.player.pos = [8.5, spawn_y, 8.5];
+            let _ = storage.save_level_data(&level_data);
+            storage.mark_dirty(0, 0);
+        }
+
+        // Safety check: Relocate player to surface if standing deep in void or pit (< 30)
+        if level_data.player.pos[1] <= 30.0 {
+            let generator = OverworldGenerator::new(level_data.seed);
+            let surface_y = generator.get_surface_height(8, 8);
+            let spawn_y = (surface_y.max(64) as f64) + 1.0;
+            println!("[WorldGen] Player was trapped low at Y={:.1}; relocating to surface Y={:.1}", level_data.player.pos[1], spawn_y);
+            level_data.player.pos[1] = spawn_y;
+            let _ = storage.save_level_data(&level_data);
+        }
+
+        let mut meshes = HashMap::new();
+        for (&sec_pos, sec) in &world.sections {
+            let mesh = greedy_mesh_section(sec, &atlas, &world);
+            meshes.insert(sec_pos, mesh);
+        }
 
         let mut chunk_manager = ChunkManager::new(level_data.seed, DEFAULT_CHUNK_RADIUS);
         if loaded || !world.sections.is_empty() {
@@ -469,25 +479,31 @@ impl<'a> GameApp<'a> {
 
 impl<'a> ApplicationHandler for GameApp<'a> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        println!("[Winit] resumed() invoked. Creating game window...");
         if self.render_ctx.is_some() {
             return;
         }
 
         let window_attrs = Window::default_attributes()
             .with_title("IronOxide - Minecraft Rust Client (WGPU)")
-            .with_inner_size(PhysicalSize::new(1280, 720));
+            .with_inner_size(PhysicalSize::new(1280, 720))
+            .with_visible(true)
+            .with_active(true);
 
         let window = Arc::new(event_loop.create_window(window_attrs).expect("Window creation failed"));
+        window.focus_window();
+        println!("[Winit] Window created successfully. Initializing WGPU RenderContext...");
 
-        // Capture cursor on start
-        let _ = window.set_cursor_grab(CursorGrabMode::Locked)
-            .or_else(|_| window.set_cursor_grab(CursorGrabMode::Confined));
-        window.set_cursor_visible(false);
-        self.mouse_captured = true;
+        let ctx = match pollster::block_on(RenderContext::new(Arc::clone(&window), &self.camera)) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("[RenderContext] Initialization failed: {e}");
+                return;
+            }
+        };
+        println!("[WGPU] RenderContext initialized. Requesting first frame redraw...");
 
-        let ctx = pollster::block_on(RenderContext::new(Arc::clone(&window), &self.camera))
-            .expect("RenderContext initialization failed");
-
+        window.request_redraw();
         self.render_ctx = Some(ctx);
         self.last_frame = Instant::now();
     }
@@ -681,6 +697,10 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                 }
             }
             WindowEvent::RedrawRequested => {
+                static FIRST_REDRAW: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+                if FIRST_REDRAW.swap(false, std::sync::atomic::Ordering::Relaxed) {
+                    println!("[Winit] First WindowEvent::RedrawRequested received!");
+                }
                 let now = Instant::now();
                 let dt = (now - self.last_frame).as_secs_f32().min(0.1);
                 self.last_frame = now;
@@ -929,6 +949,12 @@ impl<'a> ApplicationHandler for GameApp<'a> {
         }
     }
 
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        if let Some(ctx) = &self.render_ctx {
+            ctx.window.request_redraw();
+        }
+    }
+
     fn device_event(&mut self, _event_loop: &ActiveEventLoop, _device_id: DeviceId, event: DeviceEvent) {
         if !self.mouse_captured || self.inventory_gui.is_open || self.chest_gui.is_open {
             return;
@@ -936,8 +962,8 @@ impl<'a> ApplicationHandler for GameApp<'a> {
 
         if let DeviceEvent::MouseMotion { delta: (dx, dy) } = event {
             let sensitivity = 0.15;
-            let new_yaw = self.camera.yaw + (dx as f32) * sensitivity;
-            let new_pitch = self.camera.pitch - (dy as f32) * sensitivity;
+            let new_yaw = self.camera.yaw - (dx as f32) * sensitivity;
+            let new_pitch = self.camera.pitch + (dy as f32) * sensitivity;
             self.camera.set_rotation(new_yaw, new_pitch);
             self.camera.setup(self.player.position, Some(&self.world));
         }
@@ -945,11 +971,23 @@ impl<'a> ApplicationHandler for GameApp<'a> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Prefer DX12 on Windows for rock-solid stability with Intel Gen 9 / integrated graphics
+    if std::env::var("WGPU_BACKEND").is_err() {
+        unsafe {
+            std::env::set_var("WGPU_BACKEND", "dx12");
+        }
+    }
+
+    println!("[IronOxide] Starting Minecraft client engine...");
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(ControlFlow::Poll);
 
+    println!("[IronOxide] Initializing GameApp and world generation...");
     let mut app = GameApp::new();
+
+    println!("[IronOxide] Running event loop...");
     event_loop.run_app(&mut app)?;
 
+    println!("[IronOxide] Game shutdown complete.");
     Ok(())
 }

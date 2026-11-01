@@ -39,28 +39,80 @@ impl<'w> RenderContext<'w> {
         let width = size.width.max(1);
         let height = size.height.max(1);
 
-        let instance = wgpu::Instance::default();
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::DX12,
+            flags: wgpu::InstanceFlags::default(),
+            backend_options: wgpu::BackendOptions::default(),
+            display: None,
+            memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+        });
         let surface = instance.create_surface(Arc::clone(&window))?;
 
-        let adapter = instance
+        println!("[WGPU] Requesting GPU adapter...");
+        let adapter = match instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
-                apply_limit_buckets: true,
+                apply_limit_buckets: false,
             })
-            .await?;
+            .await
+        {
+            Ok(a) => a,
+            Err(e1) => {
+                println!("[WGPU] HighPerformance adapter request: {e1}; trying default adapter...");
+                match instance
+                    .request_adapter(&wgpu::RequestAdapterOptions {
+                        power_preference: wgpu::PowerPreference::default(),
+                        compatible_surface: Some(&surface),
+                        force_fallback_adapter: false,
+                        apply_limit_buckets: false,
+                    })
+                    .await
+                {
+                    Ok(a) => a,
+                    Err(e2) => {
+                        println!("[WGPU] Default adapter request: {e2}; trying fallback software adapter...");
+                        instance
+                            .request_adapter(&wgpu::RequestAdapterOptions {
+                                power_preference: wgpu::PowerPreference::default(),
+                                compatible_surface: Some(&surface),
+                                force_fallback_adapter: true,
+                                apply_limit_buckets: false,
+                            })
+                            .await?
+                    }
+                }
+            }
+        };
 
         let adapter_info = adapter.get_info();
+        println!(
+            "[WGPU] Initialized GPU: {} | Backend: {:?} | Type: {:?}",
+            adapter_info.name, adapter_info.backend, adapter_info.device_type
+        );
+
+        println!("[WGPU] Requesting device and queue with adapter limits...");
         let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor::default())
-            .await?;
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: Some("IronOxide Render Device"),
+                    required_features: wgpu::Features::empty(),
+                    required_limits: adapter.limits(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .map_err(|e| format!("Failed to request WGPU device: {e}"))?;
+        println!("[WGPU] Device and queue acquired. Configuring surface...");
 
         let mut config = surface
             .get_default_config(&adapter, width, height)
             .ok_or("Failed to get default surface configuration")?;
-        config.present_mode = wgpu::PresentMode::AutoVsync;
+        println!("[WGPU] Surface format: {:?}, size: {}x{}", config.format, width, height);
+        config.present_mode = wgpu::PresentMode::Fifo;
         surface.configure(&device, &config);
+        println!("[WGPU] Surface configured successfully.");
 
         // Uniform setup
         let aspect = width as f32 / height as f32;
@@ -205,10 +257,22 @@ impl<'w> RenderContext<'w> {
         meshes: &[&crate::render::mesher::ChunkMesh],
         dynamic_light: crate::render::dynamic_lights::DynamicLightUniform,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        static FIRST_FRAME: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+        if FIRST_FRAME.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            println!("[WGPU] First frame rendering initiated!");
+        }
+
         let output = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(tex) | wgpu::CurrentSurfaceTexture::Suboptimal(tex) => tex,
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => return Ok(()),
+            wgpu::CurrentSurfaceTexture::Timeout => {
+                eprintln!("[WGPU] Warning: get_current_texture timed out");
+                return Ok(());
+            }
+            wgpu::CurrentSurfaceTexture::Occluded => {
+                return Ok(());
+            }
             wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+                println!("[WGPU] Surface outdated/lost, resizing...");
                 let size = self.size;
                 self.resize(size);
                 return Ok(());

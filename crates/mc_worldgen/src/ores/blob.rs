@@ -154,16 +154,17 @@ impl OreBlobPlacer {
         let oy = origin.1 as f64;
         let oz = origin.2 as f64;
 
-        // REA Reference: dsp.class lines 25-138:
-        // float angle = random.nextFloat() * (float)Math.PI;
-        // float sizeDiv8 = (float)config.size / 8.0f;
+        // REA Reference: dsp.class lines 25-138 & Horizon ore_feature.rs:
         let angle = rng.next_float() * std::f32::consts::PI;
-        let size_div_8 = (size as f32) / 8.0;
+        let spread_xy = (size as f32) / 8.0;
+        let sin = crate::seed_pipeline::trig::jmath::sin(f64::from(angle));
+        let cos = crate::seed_pipeline::trig::jmath::cos(f64::from(angle));
+        let spread = f64::from(spread_xy);
 
-        let x1 = ox + (angle.sin() * size_div_8) as f64;
-        let x2 = ox - (angle.sin() * size_div_8) as f64;
-        let z1 = oz + (angle.cos() * size_div_8) as f64;
-        let z2 = oz - (angle.cos() * size_div_8) as f64;
+        let x1 = ox + sin * spread;
+        let x2 = ox - sin * spread;
+        let z1 = oz + cos * spread;
+        let z2 = oz - cos * spread;
 
         let y1 = oy + (rng.next_int_bounded(3) as f64) - 2.0;
         let y2 = oy + (rng.next_int_bounded(3) as f64) - 2.0;
@@ -172,16 +173,16 @@ impl OreBlobPlacer {
         // Each entry: (cx, cy, cz, radius)
         let mut spheres = Vec::with_capacity(size);
         for step in 0..size {
-            let t = (step as f64) / (size as f64);
-            let cx = x1 + (x2 - x1) * t;
-            let cy = y1 + (y2 - y1) * t;
-            let cz = z1 + (z2 - z1) * t;
+            let t = (step as f32) / (size as f32);
+            let t64 = f64::from(t);
+            let cx = x1 + (x2 - x1) * t64;
+            let cy = y1 + (y2 - y1) * t64;
+            let cz = z1 + (z2 - z1) * t64;
 
-            // REA Reference: dsp.class lines 98-134:
-            // double r = random.nextDouble() * (double)config.size / 16.0d;
-            // double radius = ((Math.sin(PI * t) + 1.0) * r + 1.0) / 2.0;
+            // REA Reference: dsp.class lines 98-134 & Horizon ore_feature:
             let r = rng.next_double() * (size as f64) / 16.0;
-            let radius = (((std::f64::consts::PI * t).sin() + 1.0) * r + 1.0) / 2.0;
+            let sine = crate::seed_pipeline::trig::mth_sin(f64::from(std::f32::consts::PI * t));
+            let radius = (f64::from(sine + 1.0) * r + 1.0) / 2.0;
             spheres.push((cx, cy, cz, radius));
         }
 

@@ -236,7 +236,8 @@ fn test_generate_chunk_column_full_pipeline() {
         let buf_y = (y - MIN_Y) as usize;
         for lz in 0..16 {
             for lx in 0..16 {
-                if chunk.get_local(lx, buf_y, lz) == SurfaceBlock::Deepslate {
+                let b = chunk.get_local(lx, buf_y, lz);
+                if b == SurfaceBlock::Deepslate {
                     has_deepslate = true;
                     break;
                 }

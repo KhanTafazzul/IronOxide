@@ -86,14 +86,49 @@ impl TextureAtlas {
     pub const ATLAS_WIDTH: u32 = 256;
     pub const ATLAS_HEIGHT: u32 = 256;
 
-    /// Locate `client.jar` in standard paths or fallback
+    /// Locate `client.jar` in standard paths, exe ancestry, or fallback
     pub fn find_client_jar() -> Option<PathBuf> {
-        let candidates = [
+        let mut candidates = vec![
             PathBuf::from("client.jar"),
             PathBuf::from("../client.jar"),
             PathBuf::from("../../client.jar"),
+            PathBuf::from("../../../client.jar"),
+            PathBuf::from("IronOxide/client.jar"),
+            PathBuf::from(r"C:\Users\khant\OneDrive\Desktop\Falix\Minecraft reverce in rust\client.jar"),
+            PathBuf::from(r"C:\Users\khant\OneDrive\Desktop\Falix\Minecraft reverce in rust\IronOxide\client.jar"),
         ];
-        candidates.into_iter().find(|p| p.exists())
+
+        if let Ok(exe) = std::env::current_exe() {
+            let mut cur = exe.as_path();
+            for _ in 0..6 {
+                if let Some(parent) = cur.parent() {
+                    candidates.push(parent.join("client.jar"));
+                    candidates.push(parent.join("IronOxide").join("client.jar"));
+                    cur = parent;
+                }
+            }
+        }
+
+        if let Ok(cwd) = std::env::current_dir() {
+            let mut cur = cwd.as_path();
+            for _ in 0..6 {
+                candidates.push(cur.join("client.jar"));
+                candidates.push(cur.join("IronOxide").join("client.jar"));
+                if let Some(parent) = cur.parent() {
+                    cur = parent;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        let found = candidates.into_iter().find(|p| p.exists());
+        if let Some(ref p) = found {
+            println!("[Assets] Found client.jar at: {:?}", p);
+        } else {
+            eprintln!("[Assets] Warning: client.jar not found in any standard path!");
+        }
+        found
     }
 
     /// Builds the Texture Atlas from `client.jar` (or procedural fallback if not found)
@@ -104,8 +139,8 @@ impl TextureAtlas {
             .map(|p| p.to_path_buf())
             .or_else(Self::find_client_jar);
 
-        if let Some(path) = resolved_path {
-            if let Ok(file) = File::open(&path) {
+        if let Some(ref path) = resolved_path {
+            if let Ok(file) = File::open(path) {
                 if let Ok(mut archive) = zip::ZipArchive::new(file) {
                     let texture_keys = [
                         "grass_block_top",
@@ -210,6 +245,7 @@ impl TextureAtlas {
                             }
                         }
                     }
+                    println!("[TextureAtlas] Successfully loaded {} textures from client.jar", raw_sprites.len());
                 }
             }
         }

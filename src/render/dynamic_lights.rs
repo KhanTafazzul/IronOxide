@@ -109,7 +109,9 @@ struct DynamicLight {
     pos: vec3<f32>,
     intensity: f32,
     radius: f32,
-    _padding: vec3<f32>,
+    pad0: f32,
+    pad1: f32,
+    pad2: f32,
 };
 
 @group(0) @binding(0)

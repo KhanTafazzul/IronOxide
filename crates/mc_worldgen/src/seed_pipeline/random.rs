@@ -130,6 +130,19 @@ pub struct PositionalRandomFactory {
     pub seed_hi: i64,
 }
 
+/// Mth.getSeed polynomial mixing matching Minecraft auo.b.
+#[inline]
+pub fn position_seed(x: i32, y: i32, z: i32) -> i64 {
+    let mixed = (x.wrapping_mul(3129871) as i64)
+        ^ ((z as i64).wrapping_mul(116129781))
+        ^ (y as i64);
+    mixed
+        .wrapping_mul(mixed)
+        .wrapping_mul(42317861)
+        .wrapping_add(mixed.wrapping_mul(11))
+        >> 16
+}
+
 impl PositionalRandomFactory {
     #[inline]
     pub fn new(seed_lo: i64, seed_hi: i64) -> Self {
@@ -157,15 +170,13 @@ impl PositionalRandomFactory {
     }
 
     /// Derives a positional PRNG at (x, y, z).
-    /// REA Reference: XoroshiroPositionalRandomFactory.at(x, y, z)
+    /// REA Reference: XoroshiroPositionalRandomFactory.at(x, y, z) (dpr$a.class)
     #[inline]
     pub fn at(&self, x: i32, y: i32, z: i32) -> Xoroshiro128PlusPlus {
-        let pos_seed = ((x as i64).wrapping_mul(3129871))
-            ^ ((z as i64).wrapping_mul(116129781))
-            ^ (y as i64);
-        let s0 = pos_seed ^ self.seed_lo;
-        let s1 = mix_stafford13(pos_seed) ^ self.seed_hi;
-        Xoroshiro128PlusPlus::new(s0, s1)
+        let pos_seed = position_seed(x, y, z);
+        let s0 = (pos_seed as u64) ^ (self.seed_lo as u64);
+        let s1 = self.seed_hi as u64;
+        Xoroshiro128PlusPlus::new(s0 as i64, s1 as i64)
     }
 }
 
@@ -212,7 +223,7 @@ impl Xoroshiro128PlusPlus {
         let mut l4 = l2 * (bound as u64);
         let mut l6 = l4 & 0xFFFF_FFFF;
         if l6 < bound as u64 {
-            let t = (!bound + 1) as u32 % (bound as u32);
+            let t = (bound.wrapping_neg() as u32) % (bound as u32);
             while l6 < t as u64 {
                 l2 = (self.next_int() as u32) as u64;
                 l4 = l2 * (bound as u64);
@@ -264,13 +275,17 @@ pub enum DecorationStep {
 
 /// Derives the population seed for chunk decoration matching Minecraft 1.20.4 WorldgenRandom.
 /// REA Reference: net.minecraft.world.level.levelgen.WorldgenRandom.setDecorationSeed (dpp.class)
-/// REA Reference: net.minecraft.world.level.levelgen.RandomSupport (dpf.class)
 #[inline]
 pub fn set_decoration_seed(world_seed: u64, min_chunk_x: i32, min_chunk_z: i32) -> u64 {
-    let x_part = (min_chunk_x as u64).wrapping_mul(341873128712);
-    let z_part = (min_chunk_z as u64).wrapping_mul(132897987541);
-    let s0 = world_seed ^ x_part.wrapping_add(z_part);
-    mix_stafford13(s0 as i64) as u64
+    let (s_lo, s_hi) = upgrade_seed_to_128bit(world_seed as i64);
+    let mut rng = Xoroshiro128PlusPlus::new(s_lo, s_hi);
+    let a = rng.next_long() | 1;
+    let b = rng.next_long() | 1;
+    let mixed = (min_chunk_x as i64)
+        .wrapping_mul(a)
+        .wrapping_add((min_chunk_z as i64).wrapping_mul(b))
+        ^ (world_seed as i64);
+    mixed as u64
 }
 
 /// Re-seeds an isolated Xoroshiro128++ PRNG instance for a specific feature step.
@@ -278,10 +293,10 @@ pub fn set_decoration_seed(world_seed: u64, min_chunk_x: i32, min_chunk_z: i32) 
 /// REA Reference: net.minecraft.world.level.levelgen.WorldgenRandom.setFeatureSeed (dpp.class)
 #[inline]
 pub fn set_feature_seed(population_seed: u64, feature_index: usize, step_index: usize) -> Xoroshiro128PlusPlus {
-    let derived_seed = population_seed
-        .wrapping_add(feature_index as u64)
-        .wrapping_add((step_index as u64).wrapping_mul(10000));
-    let (s_lo, s_hi) = upgrade_seed_to_128bit(derived_seed as i64);
+    let derived_seed = (population_seed as i64)
+        .wrapping_add(feature_index as i64)
+        .wrapping_add((step_index as i64).wrapping_mul(10000));
+    let (s_lo, s_hi) = upgrade_seed_to_128bit(derived_seed);
     Xoroshiro128PlusPlus::new(s_lo, s_hi)
 }
 
@@ -389,15 +404,15 @@ mod tests {
         let chunk_x = 15;
         let chunk_z = 7;
         let pop_seed = set_decoration_seed(world_seed, chunk_x, chunk_z);
-        assert_eq!(pop_seed, 15114538045649739285);
+        assert_eq!(pop_seed, 17501359787223736251);
 
         // Feature seed for Oak Tree (step 9 = VEGETAL_DECORATION, feature 3)
         let mut rng = set_feature_seed(pop_seed, 3, DecorationStep::VegetalDecoration as usize);
 
         // Verify the first 10 generated integers match vanilla WorldgenRandom.nextInt() output identically
         let expected_first_10 = [
-            -409440806, 678788834, 1967969886, 1828554918, 2074667250,
-            -1073902171, 1898899331, -328568763, 550411763, -1165301981,
+            -252408009, 546919909, 1670350504, 1420430904, 567440137,
+            -1421696972, -264791588, 1175560832, -794823311, 352958917,
         ];
         for expected in expected_first_10 {
             assert_eq!(rng.next_int(), expected);

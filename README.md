@@ -1,8 +1,10 @@
 # ⚡ IronOxide
 
-> **Minecraft 1.20.4 reverse-engineered from scratch in pure Rust.**  
+> **Minecraft 1.20.4 reverse-engineered from scratch in pure Rust by [KhanTafazzul](https://github.com/KhanTafazzul).**  
 > Zero Java runtime. Zero garbage collector stutter. 100% native multi-threaded voxel performance powered by **WGPU** and **WGSL** shaders.
 
+[![Author: KhanTafazzul](https://img.shields.io/badge/Author-KhanTafazzul-blue.svg)](https://github.com/KhanTafazzul)
+[![Repository: KhanTafazzul/IronOxide](https://img.shields.io/badge/GitHub-KhanTafazzul%2FIronOxide-181717.svg?logo=github)](https://github.com/KhanTafazzul/IronOxide)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Language: Rust 2024](https://img.shields.io/badge/Language-Rust_2024-orange.svg)](https://www.rust-lang.org/)
 [![Graphics: WGPU](https://img.shields.io/badge/Graphics-WGPU_/_WGSL-green.svg)](https://wgpu.rs/)
@@ -185,6 +187,14 @@ Total: 316 / 316 Tests Passing (100% Green)
 ```
 
 For full task-by-task engineering breakdowns and REA decompiled references, check out [DEVELOPMENT_MILESTONES.md](DEVELOPMENT_MILESTONES.md).
+
+---
+
+## 👨‍💻 Author & Maintainer
+
+Developed by **KhanTafazzul**  
+- **GitHub**: [@KhanTafazzul](https://github.com/KhanTafazzul)
+- **Repository**: [https://github.com/KhanTafazzul/IronOxide](https://github.com/KhanTafazzul/IronOxide)
 
 ---
 

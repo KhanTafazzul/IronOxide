@@ -9,6 +9,7 @@ We welcome contributions from systems engineers, graphics programmers, game deve
 ## 1. Clean-Room Engineering Principles
 
 IronOxide adheres strictly to **Clean-Room Reverse Engineering**:
+
 - **Independent Implementation**: All code in this repository is authored in safe, idiomatic Rust based on clean mathematical specifications, data-format specifications (NBT, Anvil `.mca`, JSON schemas), and behavioral observations.
 - **Zero Proprietary Code Inclusion**: Do not paste, copy, or submit decompiled Mojang bytecode or proprietary source files.
 - **Verification by Test**: New features should be verified with unit tests asserting deterministic behavioral parity.
@@ -30,7 +31,7 @@ IronOxide is organized as a modular Cargo workspace:
   - Procedural Jigsaw structure placement from Mojang template pools.
 - **[`crates/mc_entities`](crates/mc_entities/)**:
   - Entity Component System (ECS) for passive, hostile, and neutral mobs.
-  - GoalSelector AI state machine and 3D A* pathfinding.
+  - GoalSelector AI state machine and 3D A\* pathfinding.
 - **[`crates/mc_items`](crates/mc_items/)**:
   - Complete 1,329+ item enum registry, durability models, tool tiers, and armor attributes.
 - **[`crates/mc_crafting`](crates/mc_crafting/)**:
@@ -43,6 +44,7 @@ IronOxide is organized as a modular Cargo workspace:
 ## 3. Local Development & Testing Workflow
 
 ### Prerequisites
+
 - [Rust Toolchain](https://rustup.rs/) (version 1.85+ recommended, 2024 edition compatible).
 - A GPU or integrated processor with Vulkan, DirectX 12, or Metal driver support.
 

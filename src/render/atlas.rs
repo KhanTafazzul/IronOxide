@@ -240,7 +240,27 @@ impl TextureAtlas {
                             let mut buf = Vec::new();
                             if entry.read_to_end(&mut buf).is_ok() {
                                 if let Ok(img) = image::load_from_memory(&buf) {
-                                    raw_sprites.insert(key.to_string(), img.to_rgba8());
+                                    if key == "grass_block_top" || key == "oak_leaves" || key == "vine" {
+                                        let mut rgba = img.to_rgba8();
+                                        // Normalize grayscale mask textures (grass top, oak leaves, vine).
+                                        // Minecraft vanilla textures store these as grayscale masks (mean ~130-147).
+                                        // When tinted by biome colormap in the shader, unnormalized masks cut brightness
+                                        // in half (resulting in dark dull grayish-olive top faces).
+                                        // Scaling pixel values so highlights reach 255 preserves contrast while ensuring
+                                        // full vibrant Minecraft green saturation matching grass_block_side fringe.
+                                        let max_val = rgba.pixels().map(|p| p[0].max(p[1]).max(p[2])).max().unwrap_or(144).max(1) as f32;
+                                        let scale = (255.0 / max_val).min(2.0);
+                                        for pixel in rgba.pixels_mut() {
+                                            if pixel[3] > 0 {
+                                                pixel[0] = ((pixel[0] as f32 * scale).min(255.0)) as u8;
+                                                pixel[1] = ((pixel[1] as f32 * scale).min(255.0)) as u8;
+                                                pixel[2] = ((pixel[2] as f32 * scale).min(255.0)) as u8;
+                                            }
+                                        }
+                                        raw_sprites.insert(key.to_string(), rgba);
+                                    } else {
+                                        raw_sprites.insert(key.to_string(), img.to_rgba8());
+                                    }
                                 }
                             }
                         }
@@ -260,7 +280,7 @@ impl TextureAtlas {
     /// Provides fallback 16x16 textures if texture is missing or jar cannot be opened
     fn ensure_fallbacks(sprites: &mut HashMap<String, RgbaImage>) {
         let palette: &[(&str, [u8; 4])] = &[
-            ("grass_block_top", [86, 175, 49, 255]),
+            ("grass_block_top", [240, 240, 240, 255]),
             ("grass_block_side", [106, 140, 60, 255]),
             ("dirt", [134, 96, 67, 255]),
             ("stone", [125, 125, 125, 255]),

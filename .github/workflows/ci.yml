@@ -40,3 +40,4 @@ jobs:
 
       - name: Workspace Unit & Integration Tests
         run: cargo test --workspace --verbose
+

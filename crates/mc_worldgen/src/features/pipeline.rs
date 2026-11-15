@@ -671,7 +671,8 @@ impl BiomeFeatureRegistry {
             // STEP 1: LAKES
             LAKES => {
                 for &(x, y, z) in positions {
-                    if y > -54 && y < 200 {
+                    // Lava lakes only spawn underground encased in solid rock (y <= 0)
+                    if y > -54 && y <= 0 {
                         place_lava_lake(buffer, x, y, z, feature_rng);
                     }
                 }
@@ -679,7 +680,7 @@ impl BiomeFeatureRegistry {
             // STEP 2: LOCAL_MODIFICATIONS (Geodes)
             LOCAL_MODIFICATIONS => {
                 for &(x, y, z) in positions {
-                    if y < 30 {
+                    if y > -54 && y < 30 {
                         place_amethyst_geode(buffer, x, y, z, feature_rng);
                     }
                 }
@@ -962,6 +963,23 @@ fn place_lava_lake(
     cz: i32,
     rng: &mut Xoroshiro128PlusPlus,
 ) {
+    let center_lx = cx - buffer.chunk_x * 16;
+    let center_lz = cz - buffer.chunk_z * 16;
+    let center_ly = cy - MIN_Y;
+    if center_lx < 0 || center_lx >= 16 || center_lz < 0 || center_lz >= 16 || center_ly < 3 || center_ly >= (CHUNK_HEIGHT as i32 - 3) {
+        return;
+    }
+    // Verify the lake center is embedded inside solid rock (Stone or Deepslate) and NOT open air or ocean
+    let center_block = buffer.get_local(center_lx as usize, center_ly as usize, center_lz as usize);
+    if center_block != SurfaceBlock::Stone && center_block != SurfaceBlock::Deepslate {
+        return;
+    }
+    // Verify the floor below the lake is also solid rock to prevent floating lava discs in open caves or sky
+    let floor_block = buffer.get_local(center_lx as usize, (center_ly - 2) as usize, center_lz as usize);
+    if floor_block != SurfaceBlock::Stone && floor_block != SurfaceBlock::Deepslate {
+        return;
+    }
+
     let r = 3 + rng.next_int_bounded(3);
     for dz in -r..=r {
         for dy in -2..=2 {
@@ -990,6 +1008,17 @@ fn place_amethyst_geode(
     cz: i32,
     _rng: &mut Xoroshiro128PlusPlus,
 ) {
+    let center_lx = cx - buffer.chunk_x * 16;
+    let center_lz = cz - buffer.chunk_z * 16;
+    let center_ly = cy - MIN_Y;
+    if center_lx < 0 || center_lx >= 16 || center_lz < 0 || center_lz >= 16 || center_ly < 4 || center_ly >= (CHUNK_HEIGHT as i32 - 4) {
+        return;
+    }
+    let center_block = buffer.get_local(center_lx as usize, center_ly as usize, center_lz as usize);
+    if center_block != SurfaceBlock::Stone && center_block != SurfaceBlock::Deepslate {
+        return;
+    }
+
     let outer_r = 4;
     let inner_r = 2;
     for dz in -outer_r..=outer_r {

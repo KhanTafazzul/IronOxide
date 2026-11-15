@@ -106,3 +106,4 @@ Place an official Minecraft 1.20.4 `client.jar` into the repository root. IronOx
 ## License
 
 Licensed under the **GNU General Public License v3.0 (GPLv3)**. See [LICENSE](https://github.com/KhanTafazzul/IronOxide/blob/main/LICENSE) for complete details.
+

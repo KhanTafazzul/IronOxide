@@ -526,58 +526,17 @@ pub fn greedy_mesh_section_with_colormaps(
                 }
             }
 
-            // Greedy merge coplanar adjacent faces with identical textures, AO, and tint
+            // Emit 1x1 quads for each visible face with hidden-face culling against opaque neighbors.
+            // Authentic 1:1 Minecraft voxel geometry ensures crisp 16x16 pixel textures on every block
+            // without any stretching on walls, ceilings, floors, or bedrock.
             for slice_u in 0..SECTION_SIZE {
-                let mut slice_v = 0;
-                while slice_v < SECTION_SIZE {
+                for slice_v in 0..SECTION_SIZE {
                     let idx = slice_u * SECTION_SIZE + slice_v;
                     if let Some(current_face) = mask[idx] {
-                        // Prevent vertical merging along Y for side faces so side textures
-                        // (grass fringe, ores, logs, dirt) are NEVER stretched vertically.
-                        // d = 0 (West/East): u is Y, v is Z -> keep height = 1 (do not merge along Y)
-                        // d = 2 (North/South): u is X, v is Y -> keep width = 1 (do not merge along Y)
-                        let can_expand_v = d != 2;
-                        let can_expand_u = d != 0;
-
-                        // 1. Expand along v
-                        let mut width = 1;
-                        if can_expand_v {
-                            while slice_v + width < SECTION_SIZE {
-                                let next_idx = slice_u * SECTION_SIZE + (slice_v + width);
-                                if mask[next_idx] == Some(current_face) {
-                                    width += 1;
-                                } else {
-                                    break;
-                                }
-                            }
-                        }
-
-                        // 2. Expand along u
-                        let mut height = 1;
-                        if can_expand_u {
-                            'height_loop: while slice_u + height < SECTION_SIZE {
-                                for w in 0..width {
-                                    let check_idx = (slice_u + height) * SECTION_SIZE + (slice_v + w);
-                                    if mask[check_idx] != Some(current_face) {
-                                        break 'height_loop;
-                                    }
-                                }
-                                height += 1;
-                            }
-                        }
-
-                        // Clear the merged rectangle in the mask
-                        for h in 0..height {
-                            for w in 0..width {
-                                mask[(slice_u + h) * SECTION_SIZE + (slice_v + w)] = None;
-                            }
-                        }
-
-                        // Emit merged Quad
                         let u_start = slice_u as f32;
-                        let u_end = (slice_u + height) as f32;
+                        let u_end = (slice_u + 1) as f32;
                         let v_start = slice_v as f32;
-                        let v_end = (slice_v + width) as f32;
+                        let v_end = (slice_v + 1) as f32;
                         let depth = slice_d as f32;
 
                         // Canonical Minecraft vertex positions and UV mapping per direction:
@@ -695,10 +654,6 @@ pub fn greedy_mesh_section_with_colormaps(
                                 base_vertex_idx,
                             ]);
                         }
-
-                        slice_v += width;
-                    } else {
-                        slice_v += 1;
                     }
                 }
             }
@@ -948,15 +903,15 @@ mod tests {
         let atlas = TextureAtlas::load_or_create(None);
         let mesh = greedy_mesh_section(&section, &atlas, &section);
 
-        // Without greedy meshing, the top face would be 4 separate quads.
-        // With greedy meshing, the top face must be merged into 1 single quad!
+        // Each exposed block face generates an authentic 1:1 16x16 voxel quad (4 top faces).
+        // Internal shared faces between the 4 touching blocks are culled.
         let top_quads = mesh
             .vertices
             .chunks_exact(4)
             .filter(|quad| quad[0].normal_idx == direction_to_normal_idx(Direction::Up))
             .count();
 
-        assert_eq!(top_quads, 1, "2x2 top face should be merged into 1 greedy quad");
+        assert_eq!(top_quads, 4, "2x2 slab generates 4 authentic 1:1 top quads with internal faces culled");
     }
 
     #[test]
@@ -973,13 +928,13 @@ mod tests {
         // 2 isolated blocks = 12 faces. With touching internal faces culled: 12 - 2 = 10 quads.
         assert_eq!(mesh.quad_count(), 10);
 
-        // When identical blocks touch (e.g. 2 stone blocks), greedy meshing ALSO merges
-        // the 4 coplanar face pairs (top, bottom, north, south) into 4 quads + 2 ends = 6 quads.
+        // For identical blocks, internal touching faces are culled, and each exposed block face
+        // retains 1:1 authentic voxel UV resolution (10 quads total) with zero texture stretching.
         let mut section_identical = ChunkSection::new(IVec3::ZERO);
         section_identical.set_block(4, 4, 4, BlockType::Stone);
         section_identical.set_block(5, 4, 4, BlockType::Stone);
         let mesh_identical = greedy_mesh_section(&section_identical, &atlas, &section_identical);
-        assert_eq!(mesh_identical.quad_count(), 6);
+        assert_eq!(mesh_identical.quad_count(), 10);
     }
 
     #[test]

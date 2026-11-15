@@ -1,2 +1,6 @@
 /target
 **/target
+*.log
+*.txt
+client.jar
+saves/

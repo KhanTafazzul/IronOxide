@@ -188,11 +188,12 @@ impl ChunkSection {
 impl BlockReader for ChunkSection {
     #[inline(always)]
     fn get_block_at(&self, x: i32, y: i32, z: i32) -> BlockType {
-        if x >= 0 && x < SECTION_SIZE as i32
-            && y >= 0 && y < SECTION_SIZE as i32
-            && z >= 0 && z < SECTION_SIZE as i32
-        {
-            self.blocks[Self::index(x as usize, y as usize, z as usize)]
+        let size = SECTION_SIZE as i32;
+        let lx = x - self.position.x * size;
+        let ly = y - self.position.y * size;
+        let lz = z - self.position.z * size;
+        if lx >= 0 && lx < size && ly >= 0 && ly < size && lz >= 0 && lz < size {
+            self.blocks[Self::index(lx as usize, ly as usize, lz as usize)]
         } else {
             BlockType::Air
         }
@@ -415,8 +416,34 @@ pub fn greedy_mesh_section_with_colormaps(
                     let pos_a = [x[0] - q[0], x[1] - q[1], x[2] - q[2]];
                     let pos_b = [x[0], x[1], x[2]];
 
-                    let block_a = reader.get_block_at(pos_a[0], pos_a[1], pos_a[2]);
-                    let block_b = reader.get_block_at(pos_b[0], pos_b[1], pos_b[2]);
+                    let w_pos_a = [
+                        world_offset.x + pos_a[0],
+                        world_offset.y + pos_a[1],
+                        world_offset.z + pos_a[2],
+                    ];
+                    let w_pos_b = [
+                        world_offset.x + pos_b[0],
+                        world_offset.y + pos_b[1],
+                        world_offset.z + pos_b[2],
+                    ];
+
+                    let block_a = if pos_a[0] >= 0 && pos_a[0] < SECTION_SIZE as i32
+                        && pos_a[1] >= 0 && pos_a[1] < SECTION_SIZE as i32
+                        && pos_a[2] >= 0 && pos_a[2] < SECTION_SIZE as i32
+                    {
+                        section.get(pos_a[0] as usize, pos_a[1] as usize, pos_a[2] as usize)
+                    } else {
+                        reader.get_block_at(w_pos_a[0], w_pos_a[1], w_pos_a[2])
+                    };
+
+                    let block_b = if pos_b[0] >= 0 && pos_b[0] < SECTION_SIZE as i32
+                        && pos_b[1] >= 0 && pos_b[1] < SECTION_SIZE as i32
+                        && pos_b[2] >= 0 && pos_b[2] < SECTION_SIZE as i32
+                    {
+                        section.get(pos_b[0] as usize, pos_b[1] as usize, pos_b[2] as usize)
+                    } else {
+                        reader.get_block_at(w_pos_b[0], w_pos_b[1], w_pos_b[2])
+                    };
 
                     let vis_a = face_is_visible(block_a, block_b);
                     let vis_b = face_is_visible(block_b, block_a);
@@ -424,20 +451,20 @@ pub fn greedy_mesh_section_with_colormaps(
                     let mask_idx = (slice_u as usize) * SECTION_SIZE + (slice_v as usize);
 
                     if vis_a || vis_b {
-                        let (block, dir, face_block_pos) = if vis_a {
+                        let (block, dir, face_block_pos, w_face_block_pos) = if vis_a {
                             let dir = match d {
                                 0 => Direction::East,
                                 1 => Direction::Up,
                                 _ => Direction::South,
                             };
-                            (block_a, dir, pos_a)
+                            (block_a, dir, pos_a, w_pos_a)
                         } else {
                             let dir = match d {
                                 0 => Direction::West,
                                 1 => Direction::Down,
                                 _ => Direction::North,
                             };
-                            (block_b, dir, pos_b)
+                            (block_b, dir, pos_b, w_pos_b)
                         };
 
                         let normal = direction_to_normal(dir);
@@ -447,21 +474,21 @@ pub fn greedy_mesh_section_with_colormaps(
                         let mut v_dir = [0i32; 3];
                         v_dir[v] = 1;
 
-                        // Calculate AO for all 4 corners of this face cell
+                        // Calculate AO for all 4 corners of this face cell using world coordinates
                         let mut neg_u = [0i32; 3];
                         neg_u[u] = -1;
                         let mut neg_v = [0i32; 3];
                         neg_v[v] = -1;
 
-                        let ao0 = calculate_vertex_ao(reader, face_block_pos, normal, neg_u, neg_v);
-                        let ao1 = calculate_vertex_ao(reader, face_block_pos, normal, u_dir, neg_v);
-                        let ao2 = calculate_vertex_ao(reader, face_block_pos, normal, u_dir, v_dir);
-                        let ao3 = calculate_vertex_ao(reader, face_block_pos, normal, neg_u, v_dir);
+                        let ao0 = calculate_vertex_ao(reader, w_face_block_pos, normal, neg_u, neg_v);
+                        let ao1 = calculate_vertex_ao(reader, w_face_block_pos, normal, u_dir, neg_v);
+                        let ao2 = calculate_vertex_ao(reader, w_face_block_pos, normal, u_dir, v_dir);
+                        let ao3 = calculate_vertex_ao(reader, w_face_block_pos, normal, neg_u, v_dir);
 
-                        let light0 = calculate_vertex_light(reader, face_block_pos, normal, neg_u, neg_v);
-                        let light1 = calculate_vertex_light(reader, face_block_pos, normal, u_dir, neg_v);
-                        let light2 = calculate_vertex_light(reader, face_block_pos, normal, u_dir, v_dir);
-                        let light3 = calculate_vertex_light(reader, face_block_pos, normal, neg_u, v_dir);
+                        let light0 = calculate_vertex_light(reader, w_face_block_pos, normal, neg_u, neg_v);
+                        let light1 = calculate_vertex_light(reader, w_face_block_pos, normal, u_dir, neg_v);
+                        let light2 = calculate_vertex_light(reader, w_face_block_pos, normal, u_dir, v_dir);
+                        let light3 = calculate_vertex_light(reader, w_face_block_pos, normal, neg_u, v_dir);
 
                         // Biome tint calculation:
                         // - Grass Blocks (Direction::Up)
@@ -505,27 +532,38 @@ pub fn greedy_mesh_section_with_colormaps(
                 while slice_v < SECTION_SIZE {
                     let idx = slice_u * SECTION_SIZE + slice_v;
                     if let Some(current_face) = mask[idx] {
-                        // 1. Expand along v (width)
+                        // Prevent vertical merging along Y for side faces so side textures
+                        // (grass fringe, ores, logs, dirt) are NEVER stretched vertically.
+                        // d = 0 (West/East): u is Y, v is Z -> keep height = 1 (do not merge along Y)
+                        // d = 2 (North/South): u is X, v is Y -> keep width = 1 (do not merge along Y)
+                        let can_expand_v = d != 2;
+                        let can_expand_u = d != 0;
+
+                        // 1. Expand along v
                         let mut width = 1;
-                        while slice_v + width < SECTION_SIZE {
-                            let next_idx = slice_u * SECTION_SIZE + (slice_v + width);
-                            if mask[next_idx] == Some(current_face) {
-                                width += 1;
-                            } else {
-                                break;
+                        if can_expand_v {
+                            while slice_v + width < SECTION_SIZE {
+                                let next_idx = slice_u * SECTION_SIZE + (slice_v + width);
+                                if mask[next_idx] == Some(current_face) {
+                                    width += 1;
+                                } else {
+                                    break;
+                                }
                             }
                         }
 
-                        // 2. Expand along u (height)
+                        // 2. Expand along u
                         let mut height = 1;
-                        'height_loop: while slice_u + height < SECTION_SIZE {
-                            for w in 0..width {
-                                let check_idx = (slice_u + height) * SECTION_SIZE + (slice_v + w);
-                                if mask[check_idx] != Some(current_face) {
-                                    break 'height_loop;
+                        if can_expand_u {
+                            'height_loop: while slice_u + height < SECTION_SIZE {
+                                for w in 0..width {
+                                    let check_idx = (slice_u + height) * SECTION_SIZE + (slice_v + w);
+                                    if mask[check_idx] != Some(current_face) {
+                                        break 'height_loop;
+                                    }
                                 }
+                                height += 1;
                             }
-                            height += 1;
                         }
 
                         // Clear the merged rectangle in the mask
@@ -542,26 +580,48 @@ pub fn greedy_mesh_section_with_colormaps(
                         let v_end = (slice_v + width) as f32;
                         let depth = slice_d as f32;
 
-                        let mut p0 = [0.0f32; 3];
-                        let mut p1 = [0.0f32; 3];
-                        let mut p2 = [0.0f32; 3];
-                        let mut p3 = [0.0f32; 3];
-
-                        p0[d] = depth;
-                        p0[u] = u_start;
-                        p0[v] = v_start;
-
-                        p1[d] = depth;
-                        p1[u] = u_end;
-                        p1[v] = v_start;
-
-                        p2[d] = depth;
-                        p2[u] = u_end;
-                        p2[v] = v_end;
-
-                        p3[d] = depth;
-                        p3[u] = u_start;
-                        p3[v] = v_end;
+                        // Canonical Minecraft vertex positions and UV mapping per direction:
+                        // Each face generates 4 vertices [C0 (Top-Left), C1 (Bottom-Left), C2 (Bottom-Right), C3 (Top-Right)]
+                        // wound Counter-Clockwise (CCW) when viewed from the exterior.
+                        // For vertical walls, Y_top is ALWAYS mapped to v_min (top of texture) so grass, logs, and ores are upright.
+                        let (p0, p1, p2, p3) = match current_face.direction {
+                            Direction::Up => (
+                                [v_start, depth, u_start], // North-West
+                                [v_start, depth, u_end],   // South-West
+                                [v_end, depth, u_end],     // South-East
+                                [v_end, depth, u_start],   // North-East
+                            ),
+                            Direction::Down => (
+                                [v_start, depth, u_end],   // South-West
+                                [v_start, depth, u_start], // North-West
+                                [v_end, depth, u_start],   // North-East
+                                [v_end, depth, u_end],     // South-East
+                            ),
+                            Direction::North => (
+                                [u_end, v_end, depth],     // East, Top
+                                [u_end, v_start, depth],   // East, Bottom
+                                [u_start, v_start, depth], // West, Bottom
+                                [u_start, v_end, depth],   // West, Top
+                            ),
+                            Direction::South => (
+                                [u_start, v_end, depth],   // West, Top
+                                [u_start, v_start, depth], // West, Bottom
+                                [u_end, v_start, depth],   // East, Bottom
+                                [u_end, v_end, depth],     // East, Top
+                            ),
+                            Direction::West => (
+                                [depth, u_end, v_start],   // Top, North
+                                [depth, u_start, v_start], // Bottom, North
+                                [depth, u_start, v_end],   // Bottom, South
+                                [depth, u_end, v_end],     // Top, South
+                            ),
+                            Direction::East => (
+                                [depth, u_end, v_end],     // Top, South
+                                [depth, u_start, v_end],   // Bottom, South
+                                [depth, u_start, v_start], // Bottom, North
+                                [depth, u_end, v_start],   // Top, North
+                            ),
+                        };
 
                         // World position translation
                         let wp0 = [
@@ -605,23 +665,15 @@ pub fn greedy_mesh_section_with_colormaps(
 
                         let base_vertex_idx = mesh.vertices.len() as u32;
 
-                        // Ensure counter-clockwise winding when viewed from exterior
-                        let is_back_face = matches!(
-                            current_face.direction,
-                            Direction::Down | Direction::North | Direction::West
-                        );
-
-                        if !is_back_face {
-                            mesh.vertices.push(BlockVertex::new(wp0, normal_idx, [u_min, v_min], shade0, vertex_tint));
-                            mesh.vertices.push(BlockVertex::new(wp1, normal_idx, [u_max, v_min], shade1, vertex_tint));
-                            mesh.vertices.push(BlockVertex::new(wp2, normal_idx, [u_max, v_max], shade2, vertex_tint));
-                            mesh.vertices.push(BlockVertex::new(wp3, normal_idx, [u_min, v_max], shade3, vertex_tint));
-                        } else {
-                            mesh.vertices.push(BlockVertex::new(wp0, normal_idx, [u_min, v_min], shade0, vertex_tint));
-                            mesh.vertices.push(BlockVertex::new(wp3, normal_idx, [u_min, v_max], shade3, vertex_tint));
-                            mesh.vertices.push(BlockVertex::new(wp2, normal_idx, [u_max, v_max], shade2, vertex_tint));
-                            mesh.vertices.push(BlockVertex::new(wp1, normal_idx, [u_max, v_min], shade1, vertex_tint));
-                        }
+                        // Emit CCW vertices with correct UV alignment:
+                        // C0 (Top-Left)     -> [u_min, v_min]
+                        // C1 (Bottom-Left)  -> [u_min, v_max]
+                        // C2 (Bottom-Right) -> [u_max, v_max]
+                        // C3 (Top-Right)    -> [u_max, v_min]
+                        mesh.vertices.push(BlockVertex::new(wp0, normal_idx, [u_min, v_min], shade0, vertex_tint));
+                        mesh.vertices.push(BlockVertex::new(wp1, normal_idx, [u_min, v_max], shade1, vertex_tint));
+                        mesh.vertices.push(BlockVertex::new(wp2, normal_idx, [u_max, v_max], shade2, vertex_tint));
+                        mesh.vertices.push(BlockVertex::new(wp3, normal_idx, [u_max, v_min], shade3, vertex_tint));
 
                         // Minecraft AO/lighting diagonal flip rule to prevent interpolation creases
                         if (shade0 + shade2) > (shade1 + shade3) {

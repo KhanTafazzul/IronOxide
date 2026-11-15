@@ -687,8 +687,16 @@ impl BiomeFeatureRegistry {
             // STEP 3: UNDERGROUND_STRUCTURES (Dungeons)
             UNDERGROUND_STRUCTURES => {
                 for &(x, y, z) in positions {
-                    if y < 40 {
-                        place_monster_room(buffer, x, y, z, feature_rng);
+                    // Dungeons are rare structures that only generate if intersecting an open cave cavity
+                    if y < 40 && y > -55 && feature_rng.next_float() < 0.05 {
+                        let lx = x - buffer.chunk_x * 16;
+                        let lz = z - buffer.chunk_z * 16;
+                        let ly = y - MIN_Y;
+                        if lx >= 0 && lx < 16 && lz >= 0 && lz < 16 && ly >= 0 && ly < CHUNK_HEIGHT as i32 {
+                            if buffer.get_local(lx as usize, ly as usize, lz as usize) == SurfaceBlock::Air {
+                                place_monster_room(buffer, x, y, z, feature_rng);
+                            }
+                        }
                     }
                 }
             }

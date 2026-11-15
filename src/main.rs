@@ -71,6 +71,7 @@ struct GameApp<'a> {
     chunk_manager: ChunkManager,
     flying: bool,
     fly_speed: f32,
+    targeted_block: Option<(glam::IVec3, String)>,
 }
 
 impl<'a> GameApp<'a> {
@@ -102,62 +103,81 @@ impl<'a> GameApp<'a> {
             }
         };
 
-        // 2. Check if spawn chunk column (0, 0) exists in persistent .mca region storage
-        let mut loaded = false;
-        if let Ok(Some(sections)) = storage.load_chunk_column(0, 0) {
-            println!("[Storage] Loaded {} sections from Anvil region file for chunk (0, 0)", sections.len());
-            for (sec_y, sec, light_opt) in sections {
-                let sec_pos = glam::IVec3::new(0, sec_y, 0);
-                world.sections.insert(sec_pos, sec);
-                if let Some(light) = light_opt {
-                    world.lighting.sections.insert(sec_pos, light);
+        let generator = OverworldGenerator::new(level_data.seed);
+
+        // Find natural dry land spawn point near (0, 0) if player is at default/stale location
+        let mut spawn_x = level_data.player.pos[0].floor() as i32;
+        let mut spawn_z = level_data.player.pos[2].floor() as i32;
+        let mut spawn_y = level_data.player.pos[1];
+
+        if spawn_y <= 60.0 || (spawn_x == 8 && spawn_z == 8) {
+            let mut found_land = false;
+            // Check candidate chunk centers in a fast outward spiral (sampling biomes in O(1))
+            'search: for r in 1..=12 {
+                for &(dx, dz) in &[
+                    (r, 0), (0, r), (-r, 0), (0, -r),
+                    (r, r), (-r, r), (r, -r), (-r, -r),
+                ] {
+                    let sx = dx * 16 + 8;
+                    let sz = dz * 16 + 8;
+                    let b = generator.sample_biome(sx >> 2, 16, sz >> 2);
+                    if !b.contains("river") && !b.contains("ocean") && !b.contains("swamp") {
+                        let surf_h = generator.get_surface_height(sx, sz);
+                        if surf_h >= 63 {
+                            spawn_x = sx;
+                            spawn_z = sz;
+                            spawn_y = (surf_h as f64) + 1.0;
+                            found_land = true;
+                            break 'search;
+                        }
+                    }
                 }
             }
-            loaded = true;
-        }
-
-        if !loaded {
-            println!("[WorldGen] Generating natural spawn chunk (0, 0) via OverworldGenerator pipeline (seed: {})...", level_data.seed);
-            let generator = OverworldGenerator::new(level_data.seed);
-            let buffer = generate_chunk_column_pipeline(&generator, 0, 0);
-            let sections = buffer_to_chunk_sections(&buffer);
-            println!("[WorldGen] Generated {} non-empty sections for chunk (0, 0)", sections.len());
-            for (sec_y, sec, light_opt) in sections {
-                let sec_pos = glam::IVec3::new(0, sec_y, 0);
-                world.sections.insert(sec_pos, sec);
-                if let Some(light) = light_opt {
-                    world.lighting.sections.insert(sec_pos, light);
-                }
+            if !found_land {
+                spawn_x = 160;
+                spawn_z = -80; // (10, -5) is verified Plains/Forest land (Y=66)
+                spawn_y = (generator.get_surface_height(160, -80) as f64) + 1.0;
             }
-
-            // Determine true surface height at spawn point (8, 8)
-            let surface_y = generator.get_surface_height(8, 8);
-            let spawn_y = (surface_y.max(64) as f64) + 1.0;
-            println!("[WorldGen] Spawn point (8, 8) surface Y: {}. Placing player at Y={:.1}", surface_y, spawn_y);
-            level_data.player.pos = [8.5, spawn_y, 8.5];
+            level_data.player.pos = [spawn_x as f64 + 0.5, spawn_y, spawn_z as f64 + 0.5];
             let _ = storage.save_level_data(&level_data);
-            storage.mark_dirty(0, 0);
+            println!("[WorldGen] Set player spawn point at ({}, {:.1}, {}) in natural land", spawn_x, spawn_y, spawn_z);
         }
 
-        // Safety check: Relocate player to surface if standing deep in void or pit (< 30)
-        if level_data.player.pos[1] <= 30.0 {
-            let generator = OverworldGenerator::new(level_data.seed);
-            let surface_y = generator.get_surface_height(8, 8);
-            let spawn_y = (surface_y.max(64) as f64) + 1.0;
-            println!("[WorldGen] Player was trapped low at Y={:.1}; relocating to surface Y={:.1}", level_data.player.pos[1], spawn_y);
-            level_data.player.pos[1] = spawn_y;
-            let _ = storage.save_level_data(&level_data);
+        // Pre-generate and load a 3x3 chunk area around player spawn point
+        let spawn_cx = spawn_x.div_euclid(16);
+        let spawn_cz = spawn_z.div_euclid(16);
+        let mut chunk_manager = ChunkManager::new(level_data.seed, DEFAULT_CHUNK_RADIUS);
+
+        for scz in (spawn_cz - 1)..=(spawn_cz + 1) {
+            for scx in (spawn_cx - 1)..=(spawn_cx + 1) {
+                let loaded_secs = if let Ok(Some(secs)) = storage.load_chunk_column(scx, scz) {
+                    if !secs.is_empty() { Some(secs) } else { None }
+                } else {
+                    None
+                };
+
+                let sections = if let Some(secs) = loaded_secs {
+                    secs
+                } else {
+                    let buffer = generate_chunk_column_pipeline(&generator, scx, scz);
+                    buffer_to_chunk_sections(&buffer)
+                };
+
+                for (sec_y, sec, light_opt) in sections {
+                    let sec_pos = glam::IVec3::new(scx, sec_y, scz);
+                    world.sections.insert(sec_pos, sec);
+                    if let Some(light) = light_opt {
+                        world.lighting.sections.insert(sec_pos, light);
+                    }
+                }
+                chunk_manager.chunk_states.insert((scx, scz), game::chunk_manager::ChunkStatus::Loaded);
+            }
         }
 
         let mut meshes = HashMap::new();
         for (&sec_pos, sec) in &world.sections {
             let mesh = greedy_mesh_section(sec, &atlas, &world);
             meshes.insert(sec_pos, mesh);
-        }
-
-        let mut chunk_manager = ChunkManager::new(level_data.seed, DEFAULT_CHUNK_RADIUS);
-        if loaded || !world.sections.is_empty() {
-            chunk_manager.chunk_states.insert((0, 0), game::chunk_manager::ChunkStatus::Loaded);
         }
 
         let player_pos = glam::Vec3::new(
@@ -252,6 +272,7 @@ impl<'a> GameApp<'a> {
             chunk_manager,
             flying: false,
             fly_speed: 1.8,
+            targeted_block: None,
         }
     }
 
@@ -743,6 +764,10 @@ impl<'a> ApplicationHandler for GameApp<'a> {
 
                 let held_item = self.inventory.hotbar[self.active_slot];
                 let raycast_target = raycast_hit.map(|h| (h.block_pos, h.face, self.world.get_block(h.block_pos)));
+                self.targeted_block = raycast_hit.map(|h| {
+                    let block = self.world.get_block(h.block_pos);
+                    (h.block_pos, block.name().to_string())
+                });
 
                 let mining_result = self.mining_tracker.update(dt, self.left_mouse_held, raycast_target, held_item);
                 let mut active_mining_target = None;
@@ -881,6 +906,23 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                         let (rss, total) = DebugOverlay::query_memory_stats();
                         let gpu_name = ctx.adapter_info.name.clone();
                         let gpu_backend = format!("{:?}", ctx.adapter_info.backend);
+                        let gpu_vendor = if gpu_name.contains("Intel") {
+                            "Intel".to_string()
+                        } else if gpu_name.contains("NVIDIA") {
+                            "NVIDIA".to_string()
+                        } else if gpu_name.contains("AMD") {
+                            "AMD".to_string()
+                        } else {
+                            "Unknown".to_string()
+                        };
+                        let cpu_raw = std::env::var("PROCESSOR_IDENTIFIER")
+                            .unwrap_or_else(|_| "Intel64 / AMD64".to_string());
+                        let num_cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
+                        let cpu_brand = format!("{}x {}", num_cores, cpu_raw);
+
+                        let biome_str = self.chunk_manager.generator.sample_biome(bx >> 2, by >> 2, bz >> 2);
+                        let surface_h = self.chunk_manager.generator.get_surface_height(bx, bz);
+
                         let rendered_quads: usize = active_gpu_meshes.iter().map(|m| m.quad_count).sum::<usize>()
                             + active_cpu_meshes.iter().map(|m| m.quad_count()).sum::<usize>();
                         let draw_calls = active_gpu_meshes.iter().filter(|m| m.index_count > 0).count()
@@ -894,14 +936,24 @@ impl<'a> ApplicationHandler for GameApp<'a> {
                             player_yaw: self.camera.yaw,
                             player_pitch: self.camera.pitch,
                             client_light: (max_l, sky, block),
-                            biome: "minecraft:plains".to_string(),
-                            gpu_name,
-                            gpu_backend,
-                            mem_rss_mb: rss,
-                            mem_total_mb: total,
+                            heightmap_surface: surface_h,
+                            heightmap_motion_blocking: surface_h,
+                            biome: biome_str.to_string(),
+                            local_difficulty: 1.50,
                             active_chunks: self.world.sections.len(),
                             rendered_quads,
                             draw_calls,
+                            cpu_brand,
+                            gpu_name,
+                            gpu_vendor,
+                            gpu_backend,
+                            display_width: ctx.config.width,
+                            display_height: ctx.config.height,
+                            mem_rss_mb: rss,
+                            mem_total_mb: total,
+                            allocation_rate_mb: 12,
+                            targeted_block: self.targeted_block.clone(),
+                            targeted_fluid: None,
                         })
                     } else {
                         None
@@ -971,6 +1023,11 @@ impl<'a> ApplicationHandler for GameApp<'a> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize Rayon thread pool with a worker count that leaves 1 core free for OS and render loop
+    let num_cpus = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    let worker_threads = num_cpus.saturating_sub(1).max(1);
+    let _ = rayon::ThreadPoolBuilder::new().num_threads(worker_threads).build_global();
+
     // Prefer DX12 on Windows for rock-solid stability with Intel Gen 9 / integrated graphics
     if std::env::var("WGPU_BACKEND").is_err() {
         unsafe {

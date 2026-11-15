@@ -122,14 +122,18 @@ impl OverworldGenerator {
                 sloped_density
             }
         } else {
-            // Near surface (sloped_density < 1.5625): only cave entrances carve if entrances * 5.0 is negative
-            let entrances = self.cave_router.sample_caves_entrances(
-                (x as f64) * 0.05,
-                (y as f64) * 0.05,
-                (z as f64) * 0.05,
-            );
-            if entrances < 0.0 {
-                sloped_density.min(entrances * 5.0)
+            // Near surface (sloped_density < 1.5625): only carve localized cave entrances well below surface topsoil
+            if (y as f64) < (base_height - 8.0) {
+                let entrances = self.cave_router.sample_caves_entrances(
+                    (x as f64) * 0.05,
+                    (y as f64) * 0.05,
+                    (z as f64) * 0.05,
+                );
+                if entrances < -0.2 {
+                    sloped_density.min(entrances * 5.0)
+                } else {
+                    sloped_density
+                }
             } else {
                 sloped_density
             }

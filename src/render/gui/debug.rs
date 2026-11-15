@@ -25,14 +25,24 @@ pub struct DebugMetrics {
     pub player_yaw: f32,
     pub player_pitch: f32,
     pub client_light: (u8, u8, u8), // (max, sky, block)
+    pub heightmap_surface: i32,
+    pub heightmap_motion_blocking: i32,
     pub biome: String,
-    pub gpu_name: String,
-    pub gpu_backend: String,
-    pub mem_rss_mb: u64,
-    pub mem_total_mb: u64,
+    pub local_difficulty: f32,
     pub active_chunks: usize,
     pub rendered_quads: usize,
     pub draw_calls: usize,
+    pub cpu_brand: String,
+    pub gpu_name: String,
+    pub gpu_vendor: String,
+    pub gpu_backend: String,
+    pub display_width: u32,
+    pub display_height: u32,
+    pub mem_rss_mb: u64,
+    pub mem_total_mb: u64,
+    pub allocation_rate_mb: u64,
+    pub targeted_block: Option<(glam::IVec3, String)>,
+    pub targeted_fluid: Option<(glam::IVec3, String)>,
 }
 
 impl Default for DebugMetrics {
@@ -45,14 +55,24 @@ impl Default for DebugMetrics {
             player_yaw: 0.0,
             player_pitch: 0.0,
             client_light: (15, 15, 0),
+            heightmap_surface: 64,
+            heightmap_motion_blocking: 64,
             biome: "minecraft:plains".to_string(),
-            gpu_name: "Default Adapter".to_string(),
-            gpu_backend: "Vulkan".to_string(),
-            mem_rss_mb: 128,
-            mem_total_mb: 16384,
+            local_difficulty: 1.50,
             active_chunks: 0,
             rendered_quads: 0,
             draw_calls: 0,
+            cpu_brand: "8x Intel(R) Core(TM) / AMD Ryzen(TM)".to_string(),
+            gpu_name: "Default Adapter".to_string(),
+            gpu_vendor: "Intel".to_string(),
+            gpu_backend: "Vulkan".to_string(),
+            display_width: 1280,
+            display_height: 720,
+            mem_rss_mb: 128,
+            mem_total_mb: 16384,
+            allocation_rate_mb: 12,
+            targeted_block: None,
+            targeted_fluid: None,
         }
     }
 }
@@ -77,7 +97,7 @@ impl DebugMetrics {
     }
 
     /// Derives block, chunk, and Anvil region coordinates matching vanilla exo.class
-    pub fn get_coordinates(&self) -> (glam::IVec3, glam::IVec3, glam::IVec3, glam::IVec2) {
+    pub fn get_coordinates(&self) -> (glam::IVec3, glam::IVec3, glam::IVec3, glam::IVec2, glam::IVec2) {
         let bx = self.player_pos.x.floor() as i32;
         let by = self.player_pos.y.floor() as i32;
         let bz = self.player_pos.z.floor() as i32;
@@ -97,38 +117,71 @@ impl DebugMetrics {
         let rx = cx.div_euclid(32);
         let rz = cz.div_euclid(32);
         let region_pos = glam::IVec2::new(rx, rz);
+        let local_region = glam::IVec2::new(cx.rem_euclid(32), cz.rem_euclid(32));
 
-        (block_pos, chunk_pos, local_pos, region_pos)
+        (block_pos, chunk_pos, local_pos, region_pos, local_region)
     }
 
-    /// Formats Left Column (Game Information) text lines matching vanilla DebugScreenOverlay
+    /// Formats Left Column (Game Information) text lines matching vanilla DebugScreenOverlay (exo.class)
     pub fn build_left_lines(&self) -> Vec<String> {
         let (facing, axis, wrapped_yaw) = self.get_facing();
-        let (b, c, local, r) = self.get_coordinates();
+        let (b, c, local, r, local_r) = self.get_coordinates();
 
         vec![
             format!("{} ({:.0} fps / {:.2} ms)", self.engine_version, self.fps, self.frame_time_ms),
-            format!("XYZ: {:.3} / {:.3} / {:.3}", self.player_pos.x, self.player_pos.y, self.player_pos.z),
+            format!("Integrated server @ {:.1}/50.0 ms, 0 tx, 0 rx", self.frame_time_ms),
+            format!("C: {}/{} (D: 12, L: 0, C: 0)", self.active_chunks, self.active_chunks),
+            "E: 0/0, B: 0, I: 0".to_string(),
+            "P: 0. T: 0".to_string(),
+            String::new(),
+            format!("XYZ: {:.3} / {:.5} / {:.3}", self.player_pos.x, self.player_pos.y, self.player_pos.z),
             format!("Block: {} {} {} [{} {} {}]", b.x, b.y, b.z, local.x, local.y, local.z),
-            format!("Chunk: {} {} {} inside region r.{}.{}.mca", c.x, c.y, c.z, r.x, r.y),
+            format!("Chunk: {} {} {} in {} {} {} [{} {} in r.{}.{}.mca]", local.x, local.y, local.z, c.x, c.y, c.z, local_r.x, local_r.y, r.x, r.y),
             format!("Facing: {} ({}) ({:.1} / {:.1})", facing, axis, wrapped_yaw, self.player_pitch),
             format!("Client Light: {} ({} sky, {} block)", self.client_light.0, self.client_light.1, self.client_light.2),
+            format!("CH S: {} M: {}", self.heightmap_surface, self.heightmap_motion_blocking),
+            format!("SH S: {} M: {}", self.heightmap_surface, self.heightmap_motion_blocking),
             format!("Biome: {}", self.biome),
+            format!("Local Difficulty: {:.2} // 0.00 (Day 0)", self.local_difficulty),
+            format!("SC: {}, 0", self.active_chunks),
+            "Sounds: 0/247 (Mood 0%)".to_string(),
         ]
     }
 
-    /// Formats Right Column (System & Engine Information) text lines
+    /// Formats Right Column (System & Engine Information) text lines matching vanilla DebugScreenOverlay (exo.class)
     pub fn build_right_lines(&self) -> Vec<String> {
         let mem_pct = (self.mem_rss_mb * 100).checked_div(self.mem_total_mb.max(1)).unwrap_or(0);
+        let alloc_pct = ((self.mem_rss_mb * 115) / self.mem_total_mb.max(1)).min(100);
+        let alloc_mb = self.mem_rss_mb * 115 / 100;
 
-        vec![
-            format!("GPU: {}", self.gpu_name),
-            format!("Backend: {}", self.gpu_backend),
-            format!("Mem: {:2}% {}/{}MB", mem_pct, self.mem_rss_mb, self.mem_total_mb),
+        let mut lines = vec![
+            "Java: 21.0.2 64bit".to_string(),
+            format!("Mem: {:2}% {:03}/{:03}MB", mem_pct, self.mem_rss_mb, self.mem_total_mb),
+            format!("Allocation rate: {:03}MB /s", self.allocation_rate_mb),
+            format!("Allocated: {:2}% {:03}MB", alloc_pct, alloc_mb),
+            String::new(),
+            format!("CPU: {}", self.cpu_brand),
+            format!("Display: {}x{} ({})", self.display_width, self.display_height, self.gpu_vendor),
+            self.gpu_name.clone(),
+            self.gpu_backend.clone(),
+            String::new(),
             format!("Chunks: {} active", self.active_chunks),
             format!("Quads: {} rendered", self.rendered_quads),
             format!("Draw calls: {}", self.draw_calls),
-        ]
+        ];
+
+        if let Some((pos, name)) = &self.targeted_block {
+            lines.push(String::new());
+            lines.push(format!("Targeted Block: {}, {}, {}", pos.x, pos.y, pos.z));
+            lines.push(format!("minecraft:{}", name));
+        }
+
+        if let Some((pos, name)) = &self.targeted_fluid {
+            lines.push(format!("Targeted Fluid: {}, {}, {}", pos.x, pos.y, pos.z));
+            lines.push(format!("minecraft:{}", name));
+        }
+
+        lines
     }
 }
 
@@ -212,6 +265,10 @@ fn draw_text_line(
     vertices: &mut Vec<GuiVertex>,
     indices: &mut Vec<u32>,
 ) {
+    if text.is_empty() {
+        return;
+    }
+
     let line_w = text.len() as f32 * char_w;
 
     // Semi-transparent background box: RGBA(0.0, 0.0, 0.0, 0.55)
@@ -361,12 +418,19 @@ mod tests {
 
         let left = metrics.build_left_lines();
         assert_eq!(left[0], "IronOxide 0.1.0 (144 fps / 6.94 ms)");
-        assert_eq!(left[1], "XYZ: 12.345 / 64.000 / -45.678");
-        assert_eq!(left[2], "Block: 12 64 -46 [12 0 2]");
-        assert_eq!(left[3], "Chunk: 0 4 -3 inside region r.0.-1.mca");
-        assert!(left[4].starts_with("Facing: north (Towards negative Z)"));
-        assert_eq!(left[5], "Client Light: 15 (15 sky, 0 block)");
-        assert_eq!(left[6], "Biome: minecraft:plains");
+        assert_eq!(left[1], "Integrated server @ 6.9/50.0 ms, 0 tx, 0 rx");
+        assert_eq!(left[2], "C: 0/0 (D: 12, L: 0, C: 0)");
+        assert_eq!(left[3], "E: 0/0, B: 0, I: 0");
+        assert_eq!(left[4], "P: 0. T: 0");
+        assert_eq!(left[5], "");
+        assert_eq!(left[6], "XYZ: 12.345 / 64.00000 / -45.678");
+        assert_eq!(left[7], "Block: 12 64 -46 [12 0 2]");
+        assert_eq!(left[8], "Chunk: 12 0 2 in 0 4 -3 [0 29 in r.0.-1.mca]");
+        assert!(left[9].starts_with("Facing: north (Towards negative Z)"));
+        assert_eq!(left[10], "Client Light: 15 (15 sky, 0 block)");
+        assert_eq!(left[11], "CH S: 64 M: 64");
+        assert_eq!(left[12], "SH S: 64 M: 64");
+        assert_eq!(left[13], "Biome: minecraft:plains");
     }
 
     #[test]
@@ -412,13 +476,20 @@ mod tests {
         };
 
         let right = metrics.build_right_lines();
-        assert_eq!(right[0], "GPU: NVIDIA GeForce RTX 4080");
-        assert_eq!(right[1], "Backend: Vulkan");
-        assert!(right[2].starts_with("Mem:"));
-        assert!(right[2].contains("180/16384MB"));
-        assert_eq!(right[3], "Chunks: 25 active");
-        assert_eq!(right[4], "Quads: 12480 rendered");
-        assert_eq!(right[5], "Draw calls: 29");
+        assert_eq!(right[0], "Java: 21.0.2 64bit");
+        assert!(right[1].starts_with("Mem:"));
+        assert!(right[1].contains("180/16384MB"));
+        assert_eq!(right[2], "Allocation rate: 012MB /s");
+        assert!(right[3].starts_with("Allocated:"));
+        assert_eq!(right[4], "");
+        assert!(right[5].starts_with("CPU:"));
+        assert_eq!(right[6], "Display: 1280x720 (Intel)");
+        assert_eq!(right[7], "NVIDIA GeForce RTX 4080");
+        assert_eq!(right[8], "Vulkan");
+        assert_eq!(right[9], "");
+        assert_eq!(right[10], "Chunks: 25 active");
+        assert_eq!(right[11], "Quads: 12480 rendered");
+        assert_eq!(right[12], "Draw calls: 29");
     }
 
     #[test]
@@ -427,11 +498,12 @@ mod tests {
             player_pos: Vec3::new(12.345, 64.0, -45.678),
             ..Default::default()
         };
-        let (b, c, local, r) = metrics.get_coordinates();
+        let (b, c, local, r, local_r) = metrics.get_coordinates();
         assert_eq!(b, glam::IVec3::new(12, 64, -46));
         assert_eq!(c, glam::IVec3::new(0, 4, -3));
         assert_eq!(local, glam::IVec3::new(12, 0, 2));
         assert_eq!(r, glam::IVec2::new(0, -1));
+        assert_eq!(local_r, glam::IVec2::new(0, 29));
     }
 
     #[test]

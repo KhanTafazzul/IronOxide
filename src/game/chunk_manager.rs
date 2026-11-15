@@ -28,13 +28,13 @@ use mc_worldgen::pipeline::{generate_chunk_column_pipeline, ChunkColumnBuffer, C
 use mc_worldgen::seed_pipeline::terrain::OverworldGenerator;
 
 /// Default active chunk radius R
-pub const DEFAULT_CHUNK_RADIUS: i32 = 12;
+pub const DEFAULT_CHUNK_RADIUS: i32 = 6;
 /// Unload buffer radius (R + 2)
 pub const UNLOAD_PADDING: i32 = 2;
 /// Maximum GPU mesh uploads per frame to prevent frame-time spikes
-pub const MAX_GPU_UPLOADS_PER_FRAME: usize = 32;
+pub const MAX_GPU_UPLOADS_PER_FRAME: usize = 16;
 /// Maximum chunk generation tasks dispatched per frame
-pub const MAX_CHUNKS_DISPATCHED_PER_FRAME: usize = 8;
+pub const MAX_CHUNKS_DISPATCHED_PER_FRAME: usize = 2;
 
 /// Maps mc_worldgen SurfaceBlock to game engine BlockType
 pub fn surface_block_to_block_type(sb: SurfaceBlock) -> BlockType {
@@ -187,6 +187,7 @@ pub struct ChunkManager {
     pub active_radius: i32,
     pub unload_radius: i32,
     pub world_seed: i64,
+    pub generator: Arc<OverworldGenerator>,
     pub chunk_states: HashMap<(i32, i32), ChunkStatus>,
     pub meshed_chunks: HashSet<(i32, i32)>,
     pub in_flight_load_gen: HashSet<(i32, i32)>,
@@ -202,11 +203,13 @@ impl ChunkManager {
     pub fn new(world_seed: i64, active_radius: i32) -> Self {
         let (chunk_tx, chunk_rx) = channel();
         let (mesh_tx, mesh_rx) = channel();
+        let generator = Arc::new(OverworldGenerator::new(world_seed));
 
         Self {
             active_radius,
             unload_radius: active_radius + UNLOAD_PADDING,
             world_seed,
+            generator,
             chunk_states: HashMap::new(),
             meshed_chunks: HashSet::new(),
             in_flight_load_gen: HashSet::new(),
@@ -353,7 +356,7 @@ impl ChunkManager {
 
         // Dispatch background load/gen tasks up to budget
         let region_dir = storage.region_dir.clone();
-        let world_seed = self.world_seed;
+        let generator = Arc::clone(&self.generator);
         let mut dispatched = 0;
 
         for ((cx, cz), _) in candidates {
@@ -366,6 +369,7 @@ impl ChunkManager {
 
             let tx = self.chunk_tx.clone();
             let r_dir = region_dir.clone();
+            let world_generator = Arc::clone(&generator);
 
             rayon::spawn(move || {
                 let rx_coord = cx.div_euclid(32);
@@ -396,8 +400,7 @@ impl ChunkManager {
                 } else {
                     // 2. Dispatch full generation pipeline:
                     // Noise -> Carvers -> Surface -> Ores -> Foliage -> Structures
-                    let generator = OverworldGenerator::new(world_seed);
-                    let buffer = generate_chunk_column_pipeline(&generator, cx, cz);
+                    let buffer = generate_chunk_column_pipeline(&world_generator, cx, cz);
                     let sections = buffer_to_chunk_sections(&buffer);
                     let _ = tx.send(ChunkLoadMessage {
                         cx,

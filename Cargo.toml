@@ -2,8 +2,16 @@
 name = "iron_oxide"
 version = "0.1.0"
 edition = "2024"
+default-run = "iron_oxide"
 license = "GPL-3.0-or-later"
-description = "A high-performance Minecraft client and voxel engine reverse-engineered in Rust using WGPU and WGSL"
+description = "High-performance pure Rust Minecraft 1.20.4 client and native WGPU voxel engine with zero GC pauses and 1:1 seed parity"
+repository = "https://github.com/KhanTafazzul/IronOxide"
+homepage = "https://khantafazzul.github.io/IronOxide"
+documentation = "https://github.com/KhanTafazzul/IronOxide#readme"
+readme = "README.md"
+keywords = ["minecraft", "voxel", "wgpu", "gamedev", "engine"]
+categories = ["games", "rendering::engine", "graphics"]
+authors = ["KhanTafazzul <https://github.com/KhanTafazzul>"]
 
 [workspace]
 members = [

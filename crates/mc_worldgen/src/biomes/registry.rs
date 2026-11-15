@@ -380,4 +380,9 @@ impl BiomeId {
                 | BiomeId::DeepFrozenOcean
         )
     }
+
+    /// Whether this biome is a water body (ocean or river) with sea level water table.
+    pub const fn is_water_body(&self) -> bool {
+        self.is_ocean() || matches!(self, BiomeId::River | BiomeId::FrozenRiver)
+    }
 }

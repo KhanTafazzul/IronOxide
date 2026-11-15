@@ -364,7 +364,7 @@ pub fn build_overworld_rules(terracotta_bands: &TerracottaBands) -> SurfaceRule 
             ]),
             then_rule: Box::new(SurfaceRule::Block(SurfaceBlock::Gravel)),
         },
-        // Top block: GrassBlock when above water level (y >= 63), or Dirt when underwater
+        // Top block: GrassBlock when on dry surface or above water level, or Dirt when underwater in ocean/river
         SurfaceRule::If {
             condition: Condition::AbovePreliminarySurface {
                 offset: 0,
@@ -372,7 +372,22 @@ pub fn build_overworld_rules(terracotta_bands: &TerracottaBands) -> SurfaceRule 
             },
             then_rule: Box::new(SurfaceRule::Sequence(vec![
                 SurfaceRule::If {
-                    condition: Condition::WaterCheck { offset: -1 },
+                    condition: Condition::All(vec![
+                        Condition::WaterCheck { offset: -1 },
+                        Condition::Biome(vec![
+                            BiomeId::WarmOcean,
+                            BiomeId::LukewarmOcean,
+                            BiomeId::DeepLukewarmOcean,
+                            BiomeId::Ocean,
+                            BiomeId::DeepOcean,
+                            BiomeId::ColdOcean,
+                            BiomeId::DeepColdOcean,
+                            BiomeId::FrozenOcean,
+                            BiomeId::DeepFrozenOcean,
+                            BiomeId::River,
+                            BiomeId::FrozenRiver,
+                        ]),
+                    ]),
                     then_rule: Box::new(SurfaceRule::Block(SurfaceBlock::Dirt)),
                 },
                 SurfaceRule::Block(SurfaceBlock::GrassBlock),

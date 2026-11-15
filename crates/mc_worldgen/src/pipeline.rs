@@ -1,12 +1,11 @@
+
 //! Complete end-to-end 6-stage chunk generation pipeline:
 //! Noise -> Carvers -> Surface -> Ores -> Foliage -> Structures.
 
 use crate::biomes::{BiomeId, SurfaceBlock};
-use crate::features::ores::OreGenerator;
 pub use crate::seed_pipeline::terrain::{OverworldGenerator, MAX_Y, MIN_Y, SEA_LEVEL};
 use crate::structures::{BuriedTreasureGenerator, LegacyRandom, MineshaftGenerator, MineshaftType, StructureType};
 use crate::surface::SurfaceSystem;
-use crate::vegetation::{TreePlacer, TreeType};
 
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_HEIGHT: usize = (MAX_Y - MIN_Y) as usize; // 384
@@ -130,7 +129,16 @@ pub fn generate_chunk_column_pipeline(
                         };
                         buffer.set_local(lx, buf_y, lz, block);
                     } else {
-                        buffer.set_local(lx, buf_y, lz, SurfaceBlock::Air);
+                        // In vanilla Minecraft: empty space below Y=-54 fills with subterranean Lava;
+                        // space below sea level (Y=63) in ocean/water biomes fills with Water.
+                        let non_solid = if world_y < -54 {
+                            SurfaceBlock::Lava
+                        } else if world_y <= SEA_LEVEL && chunk_biome.is_water_body() {
+                            SurfaceBlock::Water
+                        } else {
+                            SurfaceBlock::Air
+                        };
+                        buffer.set_local(lx, buf_y, lz, non_solid);
                     }
                 }
             }
@@ -175,7 +183,7 @@ pub fn generate_chunk_column_pipeline(
             let col_biome = BiomeId::from_name(col_biome_str).unwrap_or(chunk_biome);
 
             // Ocean / river water column filling above surface up to sea level (Y=63)
-            if surface_y < SEA_LEVEL {
+            if col_biome.is_water_body() && surface_y < SEA_LEVEL {
                 for y in (surface_y + 1)..=SEA_LEVEL {
                     let w_buf_y = (y - MIN_Y) as usize;
                     buffer.set_local(lx, w_buf_y, lz, SurfaceBlock::Water);
@@ -206,74 +214,17 @@ pub fn generate_chunk_column_pipeline(
     }
 
     // ------------------------------------------------------------------------
-    // STAGE 3: ORES (17 vanilla ore passes with height trapezoids)
+    // STAGES 3, 4: CANONICAL 11-STEP FEATURE DECORATION PIPELINE
+    // (Ores, Springs, Trees, Geodes, Dungeons, Foliage, and Top Layer Freezing)
     // ------------------------------------------------------------------------
-    let ore_gen = OreGenerator::vanilla_overworld();
-    ore_gen.generate_chunk(&mut buffer, chunk_x, chunk_z, chunk_biome, generator.seed);
-
-    // ------------------------------------------------------------------------
-    // STAGE 4: FOLIAGE & VEGETATION
-    // ------------------------------------------------------------------------
-    let (tree_type, tree_attempts) = match chunk_biome {
-        BiomeId::Forest | BiomeId::FlowerForest => (TreeType::Oak, 8),
-        BiomeId::BirchForest | BiomeId::OldGrowthBirchForest => (TreeType::Birch, 8),
-        BiomeId::Taiga | BiomeId::OldGrowthPineTaiga | BiomeId::OldGrowthSpruceTaiga | BiomeId::SnowyTaiga => (TreeType::Spruce, 8),
-        BiomeId::DarkForest => (TreeType::DarkOak, 10),
-        BiomeId::Jungle | BiomeId::SparseJungle => (TreeType::MegaJungle, 6),
-        BiomeId::Plains | BiomeId::SunflowerPlains | BiomeId::Meadow => (TreeType::Oak, 1),
-        _ => (TreeType::Oak, 0),
-    };
-
-    if tree_attempts > 0 {
-        let mut veg_rng = LegacyRandom::from_chunk_seed(generator.seed, chunk_x, chunk_z, 54321);
-        for _ in 0..tree_attempts {
-            let lx = 2 + veg_rng.next_int_bounded(12);
-            let lz = 2 + veg_rng.next_int_bounded(12);
-            let world_x = chunk_x * 16 + lx;
-            let world_z = chunk_z * 16 + lz;
-
-            // Find surface_y
-            let mut surface_y = -64;
-            for y in (-64..=319).rev() {
-                let buf_y = (y - MIN_Y) as usize;
-                let b = buffer.get_local(lx as usize, buf_y, lz as usize);
-                if b != SurfaceBlock::Air && b != SurfaceBlock::Water {
-                    surface_y = y;
-                    break;
-                }
-            }
-
-            if surface_y >= SEA_LEVEL {
-                let soil = buffer.get_local(lx as usize, (surface_y - MIN_Y) as usize, lz as usize);
-                if TreePlacer::is_valid_soil(soil) {
-                    TreePlacer::place_tree(&mut buffer, (world_x, surface_y + 1, world_z), tree_type, &mut veg_rng);
-                }
-            }
-        }
-    }
-
-    // Ground vegetation for green biomes
-    if matches!(chunk_biome, BiomeId::Plains | BiomeId::SunflowerPlains | BiomeId::Forest | BiomeId::Meadow) {
-        let mut ground_rng = LegacyRandom::from_chunk_seed(generator.seed, chunk_x, chunk_z, 99999);
-        for _ in 0..16 {
-            let lx = ground_rng.next_int_bounded(16) as usize;
-            let lz = ground_rng.next_int_bounded(16) as usize;
-            for y in (SEA_LEVEL..=200).rev() {
-                let buf_y = (y - MIN_Y) as usize;
-                if buffer.get_local(lx, buf_y, lz) == SurfaceBlock::GrassBlock {
-                    if buf_y + 1 < CHUNK_HEIGHT && buffer.get_local(lx, buf_y + 1, lz) == SurfaceBlock::Air {
-                        let plant = match ground_rng.next_int_bounded(6) {
-                            0 => SurfaceBlock::Poppy,
-                            1 => SurfaceBlock::Dandelion,
-                            _ => SurfaceBlock::ShortGrass,
-                        };
-                        buffer.set_local(lx, buf_y + 1, lz, plant);
-                    }
-                    break;
-                }
-            }
-        }
-    }
+    let feature_registry = crate::features::BiomeFeatureRegistry::global();
+    crate::features::decorate_chunk(
+        &mut buffer,
+        chunk_x,
+        chunk_z,
+        generator.seed as u64,
+        feature_registry,
+    );
 
     // ------------------------------------------------------------------------
     // STAGE 5: STRUCTURES
